@@ -121,3 +121,11 @@ When asking, provide exactly what is missing and a recommended default.
 2. Do not switch data model without explicit request.
 3. Do not expand scope to OCI/DB refactors unless user asks.
 4. Keep changes focused on NSI -> FAST CSV, SLOSH -> raster, and FAST execution.
+
+## 9. Cloud Data Processing Policy
+
+1. All cloud-source data (for example S3, Athena, Oracle Object Storage) must be processed in cloud services.
+2. Do not download cloud data to local environments for core cleaning, joins, spatial analysis, or aggregations.
+3. Local environments may only be used to submit cloud jobs, inspect logs, and read small final summaries.
+4. Intermediate and final artifacts derived from cloud data must be written back to cloud storage and remain queryable.
+5. Any exception requires explicit user approval in the current task.
