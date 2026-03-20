@@ -29,7 +29,7 @@ Both produce identical FAST CSV format and invoke the same FAST engine.
 ### Pipeline 2: L/M/H Population Impact (County-Level)
 
 ```
-FAST predictions (Athena, ~3.5M buildings)
+FAST predictions (Athena)
     → Dedup across advisories (MAX damage per building)
     → Classify intensity zone: HIGH/MEDIUM/LOW by surge depth + damage % fallback
     → Spatial join to county (ST_CONTAINS)
@@ -70,6 +70,9 @@ Scripts live in `research/population_impact/scripts/` (01–06, executed sequent
 |--------|---------|
 | `scripts/duckdb_fast_pipeline.py` | **Primary pipeline**: NSI Parquet → FAST CSV via DuckDB SQL |
 | `scripts/fast_e2e_from_oracle.py` | Legacy E2E pipeline (row-by-row Python) |
+| `research/population_impact/scripts/01_county_damage_agg.py` | Event-level county aggregation of FAST predictions (pre-L/M/H) |
+| `research/population_impact/scripts/02_fetch_census_svi.py` | Pull county ACS + SVI metrics for population impact pipeline |
+| `research/population_impact/scripts/03_build_and_train.py` | Train ML damage model variant on FAST output |
 | `scripts/download_nsi_by_state.py` | Download NSI from USACE API → GeoJSON → Parquet (state-by-state) |
 | `scripts/nsi_raw_to_parquet.py` | Raw NSI GPKG/GeoJSON → Parquet conversion (DuckDB or geopandas engine) |
 | `scripts/slosh_to_raster.py` | SLOSH Parquet → GeoTIFF (inundation = surge - topography) |
@@ -209,7 +212,7 @@ No dedup on `bid` across parquet files — duplicate FltyIds inflate damage tota
 ## Conventions
 
 - **Commit messages**: Conventional Commits — `feat:`, `fix:`, `docs:`, `chore:` etc.
-- **Code style**: Python 3.10+, strict type hints, `black`/`ruff` formatting (line limit 120), `isort` for imports. Details in `docs/governance/code_styleguides/python_data.md`.
+- **Code style**: Python 3.10+, strict type hints, `black`/`ruff` formatting (line limit 120), `isort` for imports. Details in `conductor/code_styleguides/python_data.md` (mirrored at `docs/governance/code_styleguides/python_data.md`).
 - **TDD**: Required for data transformation functions. Mock parquet payloads locally.
 - **Execution contract**: AGENTS.md defines hard rules for agent behavior — follow it by default.
 - **Governance docs**: `docs/governance/` tracks workflow, tech stack, product definition.
@@ -220,7 +223,7 @@ No dedup on `bid` across parquet files — duplicate FltyIds inflate damage tota
 |----------|------|
 | Agent execution contract | `AGENTS.md` |
 | Pipeline flowchart (end-to-end) | `docs/pipeline_flowchart.md` |
-| C4 architecture diagrams | `docs/architecture/c4-*.md` |
+| C4 architecture diagrams | `C4-Documentation/c4-*.md` |
 | L/M/H implementation plan | `research/population_impact/IMPLEMENTATION_PLAN.md` |
 | System manual | `docs/manual/system_manual.md` |
 | Onboarding guide | `docs/wiki/zero_to_hero.md` |
