@@ -40,7 +40,7 @@ GT_EVENT_MAP = {
     "Milton": "MILTON_2024",
 }
 
-# Baseline metrics from previous approaches (PLAN_ZH.md Section 8.2)
+# Baseline metrics from previous approaches (deprecated ML pipeline)
 BASELINE_TIER1 = {"name": "Tier 1 (flat 0.73% shelter rate)", "rmse": 546.6, "mae": 315.9, "r2": None}
 BASELINE_TIER2 = {"name": "Tier 2 (ML ensemble LOEO-CV)", "rmse": 407.6, "mae": 225.8, "r2": -0.308}
 
