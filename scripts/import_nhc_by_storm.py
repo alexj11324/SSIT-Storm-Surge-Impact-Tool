@@ -1,17 +1,64 @@
 
 """Read in NHC raster files for estimated storm surge and identify relevant states."""
 
-import requests
 import io
+import re
 import zipfile
-import rasterio
+from typing import Dict, List, Optional
+
 import geopandas as gpd
+import rasterio
+import requests
 from pygris import states
-from rasterio.mask import mask
+from rasterio.io import MemoryFile
+from requests.adapters import HTTPAdapter
 from shapely.geometry import box
+from urllib3.util.retry import Retry
 
 
-def import_surge_data(storm_id, storm_name, adv, year):
+def _normalize_storm_id(storm_id: str, year: int) -> str:
+    """Ensure storm_id follows basin + two-digit number + four-digit year, using provided year if missing."""
+    storm_id = storm_id.upper()
+    match = re.match(r"(?P<basin>[A-Z]{2})(?P<number>\d{1,2})(?P<year>\d{2,4})?$", storm_id)
+    if not match:
+        return f"{storm_id}{year}"
+
+    basin = match.group("basin")
+    number = match.group("number").zfill(2)
+    provided_year = match.group("year")
+
+    if provided_year:
+        normalized_year = provided_year if len(provided_year) == 4 else f"20{provided_year}"
+    else:
+        normalized_year = str(year)
+
+    return f"{basin}{number}{normalized_year}"
+
+
+def _build_session(retries: int = 3, backoff: float = 0.5) -> requests.Session:
+    retry = Retry(
+        total=retries,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+        backoff_factor=backoff,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+def import_surge_data(
+    storm_id: str,
+    storm_name: str,
+    adv: int,
+    year: int,
+    *,
+    timeout: int = 30,
+    retries: int = 3,
+    session: Optional[requests.Session] = None,
+) -> Dict[str, object]:
     """
     Reads estimated storm surge TIFF files from NHC website for a given storm and advisory.
 
@@ -20,21 +67,27 @@ def import_surge_data(storm_id, storm_name, adv, year):
         storm_name (str): The name associated with the storm (e.g. Beryl).
         adv (int): The number of the latest advisory for the storm (e.g. 29).
         year (int): The year of the storm (e.g. 2024)
+        timeout (int): Timeout in seconds for the download request.
+        retries (int): Number of retry attempts for the download request.
+        session (requests.Session | None): Optional session to reuse or mock for testing.
 
     Returns:
         dictionary: (1) The storm surge heights data from the raster file and (2) a list of states captured in the raster data
     """
-    storm_id = storm_id.upper()
+    normalized_storm_id = _normalize_storm_id(storm_id, year)
     storm_name = storm_name.upper()
-    adv = str(adv)
-    year = str(year)
+    adv_int = int(adv)
+    adv_str = str(adv_int)
+    adv_padded = f"{adv_int:03d}"
+    year_str = str(year)
 
-    url = f"https://www.nhc.noaa.gov/gis/inundation/forecasts/{storm_id}_{adv}_tidalmask.zip"
-    tif_filename_in_zip = f"{storm_name}_{year}_adv{adv}_e10_ResultMaskRaster.tif"
+    url = f"https://www.nhc.noaa.gov/gis/inundation/forecasts/{normalized_storm_id}_{adv_padded}_tidalmask.zip"
+    tif_filename_in_zip = f"{storm_name}_{year_str}_adv{adv_str}_e10_ResultMaskRaster.tif"
+    download_session = session or _build_session(retries=retries)
 
     # Stream the ZIP file content into memory
     print(f"Downloading ZIP file from {url} into memory...")
-    response = requests.get(url, stream=True)
+    response = download_session.get(url, stream=True, timeout=timeout)
     response.raise_for_status()  # Ensure the download was successful
 
     # Use BytesIO to handle the bytes data in memory
@@ -50,7 +103,9 @@ def import_surge_data(storm_id, storm_name, adv, year):
         # Read the specific TIF file data from the ZIP archive
         print(f"Reading {tif_filename_in_zip} from archive...")
         with z.open(tif_filename_in_zip) as tif_file:
-            surge_data = rasterio.open(tif_file)
+            tif_bytes = tif_file.read()
+
+    surge_data = MemoryFile(tif_bytes).open()
 
     # Get surge data bounds for comparison with U.S. state boundaries
     surge_bounds = surge_data.bounds
@@ -58,16 +113,16 @@ def import_surge_data(storm_id, storm_name, adv, year):
     surge_extent_gdf = gpd.GeoDataFrame({'id': 1, 'geometry': [surge_polygon]}, crs=surge_data.crs)
 
     # Compare U.S. state boudaries with surge data to identify relevant states for storm surge
-    us_states = states(cb=True, cache=False, year=2024)
+    us_states = states(cb=True, cache=False, year=year)
     us_states = us_states.to_crs(surge_data.crs)
 
     overlapping_states = gpd.sjoin(us_states, surge_extent_gdf, how="inner", predicate="intersects")
 
-    # Save states
+    state_names: List[str] = []
     if not overlapping_states.empty:
-        state_names = overlapping_states['NAME'].unique()
+        state_names = overlapping_states['NAME'].unique().tolist()
     else:
-      print("States not found")
+        print("States not found")
 
     return {'data': surge_data, 'states': state_names}
 
@@ -76,7 +131,7 @@ def import_surge_data(storm_id, storm_name, adv, year):
 if __name__ == "__main__":
     ## - user inputs
     storm_name = "BERYL"
-    storm_id = "AL0224"
+    storm_id = "AL022024"
     advisory_no = 29
     year = 2024
 
