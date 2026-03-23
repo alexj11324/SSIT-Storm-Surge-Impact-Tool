@@ -31,7 +31,7 @@ graph TD
 
     subgraph "Pipeline 2: L/M/H Population Impact"
         LMH_04["04_classify_lmh.py<br/>Athena: dedup → L/M/H<br/>zone classification<br/>→ county aggregation"]
-        FMT_05["05_format_for_spreadsheet.py<br/>Census join + SVI join<br/>+ SVI bump + ARC rates<br/>shelter: H=5% M=3% L=1%<br/>feeding: H=12% M=7% L=3%"]
+        FMT_05["05_format_for_spreadsheet.py<br/>Census join + SVI join + SVI bump<br/>+ ARC rates & planning fields<br/>shelter: H=5% M=3% L=1%<br/>feeding: H=12% M=7% L=3%"]
         VAL_06["06_validate_lmh.py<br/>RMSE/MAE/R² vs GT<br/>threshold sensitivity"]
         LMH_LONG["county_lmh_long.csv<br/>(836 rows: event×county×zone)"]
         LMH_WIDE["county_lmh_features.csv<br/>(383 rows: event×county)"]
@@ -85,7 +85,6 @@ graph TD
     style DUCKDB fill:#2d6a4f,color:#fff
     style FAST fill:#d62828,color:#fff
     style LMH_04 fill:#457b9d,color:#fff
-    style SVI_BUMP fill:#6a4c93,color:#fff
     style FMT_05 fill:#457b9d,color:#fff
     style VAL_06 fill:#457b9d,color:#fff
     style SVI fill:#6a4c93,color:#fff
