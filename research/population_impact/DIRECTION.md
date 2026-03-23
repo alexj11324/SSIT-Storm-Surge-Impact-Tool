@@ -222,14 +222,13 @@ Output CSV:
     hh_shelter_low, hh_shelter_med, hh_shelter_high
 ```
 
-### 4.2 Scripts to Create
+### 4.2 Scripts (Implemented)
 
 | Script | Purpose |
 |--------|---------|
-| `01_classify_and_aggregate.sql` | Athena query: classify buildings → county L/M/H aggregates |
-| `02_population_estimates.py` | Join with Census pop, compute affected/impacted populations |
-| `03_format_for_spreadsheet.py` | Format output to match Planning Assumptions Spreadsheet columns |
-| `04_validate_against_gt.py` | Compare output against historical GT for known events |
+| `04_classify_lmh.py` | Athena query: dedup → L/M/H zone classification → county aggregation |
+| `05_format_for_spreadsheet.py` | Census join + SVI join + SVI bump (HIGH zone) + ARC conversion rates → CSV/Excel |
+| `06_validate_lmh.py` | Validation against ground truth (RMSE, MAE, R²) |
 
 ### 4.3 Colab Notebook (New Version)
 

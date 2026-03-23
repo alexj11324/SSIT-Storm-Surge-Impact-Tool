@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; [[ \"$f\" == *.py ]] && ruff format --config 'line-length=120' \"$f\" && ruff check --fix --config 'line-length=120' \"$f\"; } 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Formatting & linting with ruff..."
+          }
+        ]
+      }
+    ]
+  }
+}

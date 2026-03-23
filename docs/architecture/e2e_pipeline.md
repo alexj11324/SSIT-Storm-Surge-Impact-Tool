@@ -7,6 +7,7 @@ graph TD
         NHC["NHC P-Surge GeoTIFF<br/>(downloaded from NHC)"]
         NSI_PARQUET["NSI Parquet<br/>(partitioned by state)"]
         CENSUS["Census ACS 5-year API<br/>(county population)"]
+        SVI["CDC SVI 2022<br/>(county-level, RPL_THEMES 0-1)"]
         GT["Ground Truth Data.xlsx<br/>(9 hurricanes 2018-2024)"]
     end
 
@@ -30,7 +31,8 @@ graph TD
 
     subgraph "Pipeline 2: L/M/H Population Impact"
         LMH_04["04_classify_lmh.py<br/>Athena: dedup → L/M/H<br/>zone classification<br/>→ county aggregation"]
-        FMT_05["05_format_for_spreadsheet.py<br/>Census join + ARC rates<br/>shelter: H=5% M=3% L=1%<br/>feeding: H=12% M=7% L=3%"]
+        SVI_BUMP["SVI Conditional Bump<br/>HIGH zone: pop_impacted<br/>× (1 + 0.2 × svi_score)"]
+        FMT_05["05_format_for_spreadsheet.py<br/>Census join + SVI join<br/>+ SVI bump + ARC rates<br/>shelter: H=5% M=3% L=1%<br/>feeding: H=12% M=7% L=3%"]
         VAL_06["06_validate_lmh.py<br/>RMSE/MAE/R² vs GT<br/>threshold sensitivity"]
         LMH_LONG["county_lmh_long.csv<br/>(836 rows: event×county×zone)"]
         LMH_WIDE["county_lmh_features.csv<br/>(383 rows: event×county)"]
@@ -69,7 +71,9 @@ graph TD
     LMH_04 --> LMH_WIDE
     LMH_WIDE --> FMT_05
     CENSUS --> FMT_05
-    FMT_05 --> PLANNING
+    SVI --> FMT_05
+    FMT_05 --> SVI_BUMP
+    SVI_BUMP --> PLANNING
     PLANNING --> VAL_06
     GT --> VAL_06
     VAL_06 --> REPORT
@@ -83,8 +87,10 @@ graph TD
     style DUCKDB fill:#2d6a4f,color:#fff
     style FAST fill:#d62828,color:#fff
     style LMH_04 fill:#457b9d,color:#fff
+    style SVI_BUMP fill:#6a4c93,color:#fff
     style FMT_05 fill:#457b9d,color:#fff
     style VAL_06 fill:#457b9d,color:#fff
+    style SVI fill:#6a4c93,color:#fff
     style PLANNING fill:#e76f51,color:#fff
     style S3 fill:#ff9f1c,color:#000
     style ATHENA fill:#ff9f1c,color:#000
@@ -97,6 +103,7 @@ graph TD
 | Green | Primary local pipeline (preferred) |
 | Red | FAST engine core |
 | Blue | L/M/H population impact pipeline |
+| Purple | SVI data source + conditional bump |
 | Orange | AWS services (S3/Athena) |
 | Coral | Final deliverable |
 

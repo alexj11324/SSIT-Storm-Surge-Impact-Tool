@@ -58,15 +58,17 @@ nano configs/event_state_map.yaml
 
 ### 4. Running Pipeline Modules Locally
 
-*Translate raw NOAA points to Depth TIFF:*
+*Run Core Damage Engine (preferred — DuckDB pipeline):*
 ```bash
-python scripts/slosh_to_raster.py --basin ny3mom --category 3 --tide high
+python scripts/duckdb_fast_pipeline.py --state Florida
 ```
 
-*Run Core Damage Engine:*
+*Run Core Damage Engine (legacy — row-by-row):*
 ```bash
 python scripts/fast_e2e_from_oracle.py --state-scope Florida --raster-name auto --config configs/fast_e2e.yaml
 ```
+
+> **Note**: `slosh_to_raster.py` is legacy. The active pipeline uses NHC P-Surge GeoTIFF rasters downloaded directly from NHC — no conversion needed.
 
 ---
 
@@ -126,6 +128,120 @@ For security bounds, do NOT commit actual AWS keys into the version log or YAML 
 | `bash scripts/launch_cloud_parallel.sh` | Orchestrates remote spinning via Boto3/CLI. |
 | `bash scripts/monitor_parallel.sh` | Hooks into EC2/Batch lifecycle stream and surfaces active outputs to host. |
 | `bash scripts/terminate_parallel.sh` | Safety parachute destroying active run queues. |
+
+---
+
+## Pipeline 2: L/M/H Population Impact
+
+After Pipeline 1 (FAST Damage Engine) produces building-level damage predictions, Pipeline 2 classifies them into **Low / Medium / High intensity zones** and aggregates to county-level population estimates for Red Cross mass care planning.
+
+### Data Flow
+
+```
+FAST Building Predictions (Athena)
+  → Dedup across advisories (MAX damage per building)
+  → Classify intensity zone per building (surge depth + damage %)
+  → Spatial join to county (ST_CONTAINS)
+  → County × zone aggregation
+  → Census population join
+  → SVI join + conditional bump (HIGH zone only)
+  → ARC conversion rates → shelter / feeding estimates
+```
+
+### Intensity Zone Classification
+
+Each building is classified based on surge depth (primary) with damage % fallback:
+
+| Zone | Surge Depth | Damage % (fallback) |
+|------|-------------|---------------------|
+| **HIGH** | > 12 ft | > 35% |
+| **MEDIUM** | 9–12 ft | 15–35% |
+| **LOW** | 4–8 ft | > 0% |
+
+Source: ARC Mass Care Planning Assumptions Job Tool V.6.0, Figures 9–10.
+
+### ARC Conversion Rates
+
+| Impact Zone | Shelter % | Feeding % |
+|-------------|-----------|-----------|
+| HIGH | 5.0% | 12.0% |
+| MEDIUM | 3.0% | 7.0% |
+| LOW | 1.0% | 3.0% |
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `research/population_impact/scripts/04_classify_lmh.py` | Athena query: dedup → L/M/H classification → county aggregation |
+| `research/population_impact/scripts/05_format_for_spreadsheet.py` | Census join + SVI join + SVI bump + ARC rates → CSV/Excel |
+| `research/population_impact/scripts/06_validate_lmh.py` | Validation against ground truth (RMSE, MAE, R²) |
+
+### Running Pipeline 2
+
+```bash
+cd research/population_impact/scripts
+
+# Step 1: Classify and aggregate (requires AWS credentials for Athena)
+python 04_classify_lmh.py --output-dir ../data
+
+# Step 2: Format for ARC spreadsheet (SVI bump enabled by default)
+python 05_format_for_spreadsheet.py \
+  --input ../data/county_lmh_features.csv \
+  --census ../data/census_county_population.csv \
+  --output-dir ../outputs
+
+# Step 3: Validate against ground truth
+python 06_validate_lmh.py
+```
+
+### Output
+
+- `planning_assumptions_output.csv` — county-level L/M/H population estimates
+- `arc_planning_template_lmh.xlsx` — Excel with Estimates + Parameters sheets
+- `lmh_validation_report.md` — accuracy metrics vs historical events
+
+Full architecture diagram: [`docs/architecture/e2e_pipeline.md`](docs/architecture/e2e_pipeline.md)
+
+---
+
+## SVI (Social Vulnerability Index) Adjustment
+
+The population impact pipeline applies a **conditional SVI bump** to HIGH intensity zones. Counties with higher social vulnerability (elderly, low-income, minority, housing-insecure populations) generate disproportionately higher demand for Red Cross services when severely impacted.
+
+### How it works
+
+```
+pop_impacted_high_adjusted = pop_impacted_high × (1 + SVI_BUMP_WEIGHT × svi_score)
+```
+
+- **`svi_score`**: CDC SVI 2022 county-level overall percentile (`RPL_THEMES`, range 0–1). Downloaded automatically from CDC on first run.
+- **`SVI_BUMP_WEIGHT`**: Default **0.20** — a county with SVI=1.0 (most vulnerable) gets a 20% uplift on HIGH zone estimates; SVI=0 gets no bump.
+- The bump only applies to **HIGH** intensity zones. Medium and Low zones are unchanged.
+
+### Tuning the default
+
+> **The default weight of 0.20 is a starting point and should be calibrated against ground truth data.** Run `06_validate_lmh.py` with different `--svi-bump-weight` values and compare RMSE/MAE against historical events to find the optimal weight for your planning region.
+
+```bash
+# Default (20% max bump)
+python 05_format_for_spreadsheet.py
+
+# More aggressive bump (30%)
+python 05_format_for_spreadsheet.py --svi-bump-weight 0.30
+
+# Disable SVI adjustment entirely
+python 05_format_for_spreadsheet.py --no-svi
+```
+
+| SVI Score | Bump (weight=0.20) | Bump (weight=0.30) |
+|-----------|-------------------|-------------------|
+| 0.0 | +0% | +0% |
+| 0.25 | +5% | +7.5% |
+| 0.50 | +10% | +15% |
+| 0.75 | +15% | +22.5% |
+| 1.00 | +20% | +30% |
+
+Data source: [CDC/ATSDR SVI 2022](https://www.atsdr.cdc.gov/placeandhealth/svi/index.html)
 
 ---
 

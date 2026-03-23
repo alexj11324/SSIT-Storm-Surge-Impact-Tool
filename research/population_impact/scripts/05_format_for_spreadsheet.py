@@ -37,6 +37,14 @@ import requests
 SHELTER_RATES = {"high": 0.05, "medium": 0.03, "low": 0.01}
 FEEDING_RATES = {"high": 0.12, "medium": 0.07, "low": 0.03}
 
+# SVI bump: when intensity zone is HIGH, scale pop_impacted upward by
+# (1 + SVI_HIGH_BUMP_WEIGHT * svi_score).  svi_score is CDC RPL_THEMES (0-1).
+# Example: SVI=0 → no bump; SVI=0.5 → +10%; SVI=1.0 → +20%.
+SVI_HIGH_BUMP_WEIGHT = 0.20
+
+# CDC SVI 2022 county-level dataset URL
+CDC_SVI_URL = "https://svi.cdc.gov/Documents/Data/2022/csv/SVI_2022_US_county.csv"
+
 ZONES = ["low", "medium", "high"]
 
 OUTPUT_COLUMNS = [
@@ -57,6 +65,8 @@ OUTPUT_COLUMNS = [
     "hh_feeding_low",
     "hh_feeding_medium",
     "hh_feeding_high",
+    "svi_score",
+    "svi_bump_applied",
 ]
 
 # Census API (ACS 5-year, 2022)
@@ -167,6 +177,84 @@ def load_census(census_path: Path) -> pd.DataFrame:
     # CSV not found — fetch from API
     log(f"Census CSV not found at {census_path}. Fetching from Census API...")
     return fetch_census_population(census_path)
+
+
+# ---------------------------------------------------------------------------
+# SVI data helpers
+# ---------------------------------------------------------------------------
+
+def fetch_svi_data(output_path: Path) -> pd.DataFrame:
+    """Download CDC SVI 2022 county-level data and save locally.
+
+    Returns DataFrame with columns: county_fips5, svi_score (RPL_THEMES).
+    """
+    log("Fetching CDC SVI 2022 county-level data...")
+    try:
+        resp = requests.get(CDC_SVI_URL, timeout=120)
+        resp.raise_for_status()
+    except Exception as e:
+        raise RuntimeError(f"CDC SVI download failed: {e}")
+
+    df = pd.read_csv(io.StringIO(resp.text), dtype={"FIPS": str})
+
+    # RPL_THEMES is the overall SVI percentile (0-1); -999 means missing
+    df = df[["FIPS", "RPL_THEMES"]].copy()
+    df.rename(columns={"FIPS": "county_fips5", "RPL_THEMES": "svi_score"}, inplace=True)
+    df["county_fips5"] = df["county_fips5"].str.zfill(5)
+    df.loc[df["svi_score"] < 0, "svi_score"] = 0.0  # replace -999 sentinel
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path, index=False)
+    log(f"  SVI data: {len(df)} counties -> {output_path}")
+    return df
+
+
+def load_svi(svi_path: Path) -> pd.DataFrame:
+    """Load SVI data from local CSV or fetch from CDC.
+
+    Returns DataFrame with columns: county_fips5, svi_score
+    """
+    if svi_path.exists():
+        log(f"Loading SVI data from {svi_path}")
+        df = pd.read_csv(svi_path, dtype={"county_fips5": str})
+        df["county_fips5"] = df["county_fips5"].str.zfill(5)
+        if "svi_score" not in df.columns:
+            raise RuntimeError(
+                f"SVI CSV missing 'svi_score' column. Available: {list(df.columns)}"
+            )
+        log(f"  Loaded SVI for {len(df)} counties")
+        return df[["county_fips5", "svi_score"]]
+
+    log(f"SVI CSV not found at {svi_path}. Downloading from CDC...")
+    return fetch_svi_data(svi_path)
+
+
+def apply_svi_bump(df: pd.DataFrame, bump_weight: float = SVI_HIGH_BUMP_WEIGHT) -> pd.DataFrame:
+    """Apply SVI-based bump to HIGH intensity zone population estimates.
+
+    For HIGH zones only: pop_impacted_high *= (1 + bump_weight * svi_score)
+    This reflects that socially vulnerable communities in severely damaged areas
+    generate disproportionately higher demand for Red Cross services.
+    """
+    if "svi_score" not in df.columns:
+        log("  WARNING: No SVI data available — skipping SVI bump")
+        df["svi_bump_applied"] = False
+        return df
+
+    has_svi = df["svi_score"] > 0
+    bump_factor = 1 + bump_weight * df["svi_score"]
+
+    # Only bump HIGH zone impacted population
+    df["pop_impacted_high"] = df["pop_impacted_high"].where(
+        ~has_svi, df["pop_impacted_high"] * bump_factor
+    )
+
+    df["svi_bump_applied"] = has_svi
+    n_bumped = has_svi.sum()
+    avg_bump = (bump_factor[has_svi].mean() - 1) * 100 if n_bumped > 0 else 0
+    log(f"  SVI bump applied to {n_bumped} county-events "
+        f"(avg bump: +{avg_bump:.1f}% on HIGH zone)")
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +448,8 @@ def export_excel(df: pd.DataFrame, output_path: Path) -> None:
             "Data Source — Population",
             "Data Source — Surge/Damage",
             "Data Source — Census",
+            "Data Source — SVI",
+            "SVI Bump Weight (HIGH zone only)",
             "Generated",
         ],
         "Value": [
@@ -378,6 +468,8 @@ def export_excel(df: pd.DataFrame, output_path: Path) -> None:
             "NSI building-level (pop2pmu65 + pop2pmo65) or bldg count x 2.53",
             "FAST predictions via Athena (arc_storm_surge.predictions)",
             "Census ACS 5-year 2022 (B01001_001E)",
+            "CDC SVI 2022 county-level (RPL_THEMES, 0-1 percentile)",
+            SVI_HIGH_BUMP_WEIGHT,
             datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         ],
     }
@@ -412,6 +504,23 @@ def main():
              "(default: data/census_county_population.csv)",
     )
     parser.add_argument(
+        "--svi",
+        default="data/svi_county.csv",
+        help="Path to CDC SVI county CSV "
+             "(default: data/svi_county.csv; fetched from CDC if missing)",
+    )
+    parser.add_argument(
+        "--svi-bump-weight",
+        type=float,
+        default=SVI_HIGH_BUMP_WEIGHT,
+        help=f"SVI bump weight for HIGH zones (default: {SVI_HIGH_BUMP_WEIGHT})",
+    )
+    parser.add_argument(
+        "--no-svi",
+        action="store_true",
+        help="Disable SVI bump adjustment",
+    )
+    parser.add_argument(
         "--output-dir",
         default="outputs/",
         help="Output directory (default: outputs/)",
@@ -420,6 +529,7 @@ def main():
 
     input_path = Path(args.input)
     census_path = Path(args.census)
+    svi_path = Path(args.svi)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -461,6 +571,25 @@ def main():
     # Fill missing county_name / state
     df["county_name"] = df["county_name"].fillna("")
     df["state"] = df["state"].fillna("")
+
+    # -----------------------------------------------------------------------
+    # Step 3b: Load and join SVI data
+    # -----------------------------------------------------------------------
+    if not args.no_svi:
+        log("Step 3b: Loading CDC SVI data")
+        svi_df = load_svi(svi_path)
+        df = df.merge(svi_df, on="county_fips5", how="left")
+        df["svi_score"] = df["svi_score"].fillna(0.0)
+        matched_svi = (df["svi_score"] > 0).sum()
+        log(f"  {matched_svi}/{len(df)} county-events matched SVI data")
+
+        # Step 3c: Apply SVI bump on HIGH intensity zones
+        log("Step 3c: Applying SVI bump to HIGH intensity zones")
+        df = apply_svi_bump(df, bump_weight=args.svi_bump_weight)
+    else:
+        log("Step 3b: SVI bump disabled (--no-svi)")
+        df["svi_score"] = 0.0
+        df["svi_bump_applied"] = False
 
     # -----------------------------------------------------------------------
     # Step 4: Apply ARC conversion rates

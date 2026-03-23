@@ -6,8 +6,10 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Local assistant configs
-.claude/
+# Local assistant configs (keep settings.json + skills/ tracked)
+.claude/*
+!.claude/settings.json
+!.claude/skills/
 
 # macOS / Finder
 .DS_Store

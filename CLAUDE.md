@@ -108,6 +108,8 @@ Scripts live in `research/population_impact/scripts/` (04–06, executed sequent
 
 **ARC conversion rates** (shelter: H=5%, M=3%, L=1% | feeding: H=12%, M=7%, L=3%).
 
+**SVI conditional bump**: CDC SVI 2022 county-level score (RPL_THEMES, 0–1) applies a `(1 + 0.20 × svi_score)` multiplier to `pop_impacted_high` only. Configurable via `--svi-bump-weight`; disable with `--no-svi`. Default weight (0.20) needs calibration against ground truth.
+
 ### Data Sources
 
 | Dataset | Format | Location |
@@ -117,6 +119,7 @@ Scripts live in `research/population_impact/scripts/` (04–06, executed sequent
 | **Ground Truth** | Excel | `Ground Truth Data.xlsx` — 9 hurricanes 2018-2024 |
 | **FAST Depth-Damage Functions** | CSV/Excel lookup tables | `FAST-main/Lookuptables/` |
 | **Census ACS 5-year** | API | County population for L/M/H pipeline |
+| **CDC SVI 2022** | CSV (auto-downloaded) | County-level social vulnerability index (RPL_THEMES 0–1) for HIGH zone bump |
 
 ### FAST Engine Internals
 
@@ -263,7 +266,7 @@ No dedup on `bid` across parquet files — duplicate FltyIds inflate damage tota
 ## Conventions
 
 - **Commit messages**: Conventional Commits — `feat:`, `fix:`, `docs:`, `chore:` etc.
-- **Code style**: Python 3.10+, strict type hints, `black`/`ruff` formatting (line limit 120), `isort` for imports. Details in `docs/governance/code_styleguides/python_data.md`.
+- **Code style**: Python 3.10+, strict type hints, `ruff format` (line-length 120) + `ruff check --fix` for linting. Details in `docs/governance/code_styleguides/python_data.md`.
 - **TDD**: Required for data transformation functions. Mock parquet payloads locally.
 - **Execution contract**: AGENTS.md defines hard rules for agent behavior — follow it by default.
 - **Governance docs**: `docs/governance/` tracks workflow, tech stack, product definition.
