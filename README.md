@@ -80,16 +80,17 @@ This section is for engineers inheriting the pipeline. Instead of relying on a m
 
 ```text
 ARC_Capstone/
-├── C4-Documentation/        # Granular Architectural Diagrams (Component, Context)
-├── conductor/               # Internal tracking status of tracks, configurations, and strict guidelines
 ├── configs/                 # YAML Event Router and end-to-end execution constants
-├── docs/                    
-│   ├── manual/              # Long-form system manual 
-│   └── wiki/                # Deep Principals guide & Onboarding tutorials
+├── data/                    # Ground truth, Excel interface, reference datasets
+├── docs/
+│   ├── architecture/        # E2E pipeline diagrams, C4 diagrams
+│   ├── manual/              # Long-form system manual
+│   └── wiki/                # Onboarding tutorials
 ├── FAST-main/               # Embedded FEMA FAST Assessment core module
-└── scripts/                 # Core Pipeline operations 
+├── research/                # Population impact pipeline (L/M/H + Shelter Demand)
+└── scripts/                 # Core Pipeline operations
     ├── duckdb_fast_pipeline.py    # Spatial intersections and logic orchestration
-    ├── fast_e2e_from_oracle.py    # Legacy-named main trigger route
+    ├── import_nhc_by_storm.py     # NHC P-Surge raster download
     ├── slosh_to_raster.py         # Sub-process building GeoTIFF from points
     ├── deploy_to_instances.py     # Remote AWS node bootstrapping
     └── launch_cloud_parallel.sh   # Ephemeral execution trigger

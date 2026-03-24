@@ -135,7 +135,7 @@ shelter_seeking = population × BHI_factor × SVI_Value_Mapped
 |---------|--------|----------|
 | **NSI** (National Structure Inventory) | Parquet, partitioned by state | Local filesystem or via `download_nsi_by_state.py` |
 | **NHC P-Surge rasters** | GeoTIFF (.tif), flood depth in feet, downloaded directly from NHC | `FAST-main/rasters/` — 27 rasters (9 events x 3 advisories) |
-| **Ground Truth** | Excel | `Ground Truth Data.xlsx` — 9 hurricanes 2018-2024 |
+| **Ground Truth** | Excel | `data/Ground Truth Data.xlsx` — 9 hurricanes 2018-2024 |
 | **FAST Depth-Damage Functions** | CSV/Excel lookup tables | `FAST-main/Lookuptables/` |
 | **Census ACS 5-year** | API | County population for L/M/H pipeline |
 | **CDC SVI 2022** | CSV (auto-downloaded) | County-level social vulnerability index (RPL_THEMES 0–1) for HIGH zone bump |
