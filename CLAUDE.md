@@ -100,7 +100,7 @@ FAST predictions (Athena)
     → Planning Assumptions Spreadsheet (columns J-R)
 ```
 
-Scripts live in `research/population_impact/scripts/` (04–06, executed sequentially). Full flowchart: `docs/pipeline_flowchart.md`.
+Scripts live in `scripts/` (04–06, executed sequentially). Full flowchart: `docs/pipeline_flowchart.md`.
 
 ### Pipeline 3: Shelter Demand (Census Tract, Colab)
 
@@ -114,7 +114,7 @@ Excel params (JSON)
     → Census tract population + SVI mapping → shelter-seeking (low/high)
 ```
 
-Runs entirely in Google Colab via `research/population_impact/notebooks/shelter_demand.ipynb`. Uses BHI (Building Habitability Index) instead of ARC fixed conversion rates. Full diagram: `docs/architecture/shelter_demand_pipeline.md`.
+Runs entirely in Google Colab via `notebooks/shelter_demand.ipynb`. Uses BHI (Building Habitability Index) instead of ARC fixed conversion rates. Full diagram: `docs/architecture/shelter_demand_pipeline.md`.
 
 **Core formula** (verified against Excel ground truth):
 ```
@@ -164,10 +164,10 @@ shelter_seeking = population × BHI_factor × SVI_Value_Mapped
 | `scripts/match_county_coverage_cloud.py` | County-level coverage analysis against ground truth |
 | `scripts/deploy_to_instances.py` | Remote AWS node bootstrapping |
 | `scripts/gen_cloudinit.py` | Generate cloud-init config for EC2 instances |
-| `research/population_impact/scripts/04_classify_lmh.py` | Athena query: dedup + L/M/H zone classification + county agg |
-| `research/population_impact/scripts/05_format_for_spreadsheet.py` | Census join + ARC conversion rates → planning output CSV/XLSX |
-| `research/population_impact/scripts/06_validate_lmh.py` | Validation against ground truth (RMSE, MAE, R²) |
-| `research/population_impact/notebooks/shelter_demand.ipynb` | **Colab E2E**: NHC raster → FAST → BHI → tract-level shelter demand |
+| `scripts/04_classify_lmh.py` | Athena query: dedup + L/M/H zone classification + county agg |
+| `scripts/05_format_for_spreadsheet.py` | Census join + ARC conversion rates → planning output CSV/XLSX |
+| `scripts/06_validate_lmh.py` | Validation against ground truth (RMSE, MAE, R²) |
+| `notebooks/shelter_demand.ipynb` | **Colab E2E**: NHC raster → FAST → BHI → tract-level shelter demand |
 
 ## Environment Setup
 

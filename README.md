@@ -87,7 +87,8 @@ ARC_Capstone/
 │   ├── manual/              # Long-form system manual
 │   └── wiki/                # Onboarding tutorials
 ├── FAST-main/               # Embedded FEMA FAST Assessment core module
-├── research/                # Population impact pipeline (L/M/H + Shelter Demand)
+├── notebooks/               # Colab notebooks (shelter demand, L/M/H deploy)
+├── outputs/                 # Pipeline output artifacts
 └── scripts/                 # Core Pipeline operations
     ├── duckdb_fast_pipeline.py    # Spatial intersections and logic orchestration
     ├── import_nhc_by_storm.py     # NHC P-Surge raster download
@@ -173,14 +174,14 @@ Source: ARC Mass Care Planning Assumptions Job Tool V.6.0, Figures 9–10.
 
 | Script | Purpose |
 |--------|---------|
-| `research/population_impact/scripts/04_classify_lmh.py` | Athena query: dedup → L/M/H classification → county aggregation |
-| `research/population_impact/scripts/05_format_for_spreadsheet.py` | Census join + SVI join + SVI bump + ARC rates → CSV/Excel |
-| `research/population_impact/scripts/06_validate_lmh.py` | Validation against ground truth (RMSE, MAE, R²) |
+| `scripts/04_classify_lmh.py` | Athena query: dedup → L/M/H classification → county aggregation |
+| `scripts/05_format_for_spreadsheet.py` | Census join + SVI join + SVI bump + ARC rates → CSV/Excel |
+| `scripts/06_validate_lmh.py` | Validation against ground truth (RMSE, MAE, R²) |
 
 ### Running Pipeline 2
 
 ```bash
-cd research/population_impact
+cd .
 
 # Step 1: Classify and aggregate (requires AWS credentials for Athena)
 python scripts/04_classify_lmh.py --output-dir data
@@ -224,7 +225,7 @@ A more granular shelter demand estimation pipeline that runs entirely in Google 
 
 1. Open `ARC Storm Surge Shelter Demand.xlsx`, fill in storm parameters (Step 1)
 2. Copy the JSON params from Step 6
-3. Open [`shelter_demand.ipynb`](research/population_impact/notebooks/shelter_demand.ipynb) in Colab
+3. Open [`shelter_demand.ipynb`](notebooks/shelter_demand.ipynb) in Colab
 4. Paste params into Cell 2, Run All
 5. Copy results back into Excel Step 7
 
