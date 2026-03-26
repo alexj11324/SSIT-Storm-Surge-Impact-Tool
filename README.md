@@ -26,11 +26,18 @@ pip install ruff  # linting
 ## Quick Start
 
 ```bash
-# Run the primary pipeline for a single state
-python scripts/duckdb_fast_pipeline.py --state Florida
+# Run the primary pipeline (DuckDB SQL → FAST CSV)
+python scripts/duckdb_fast_pipeline.py \
+  --parquet-glob "nsi/state=FL/*.parquet" \
+  --raster FAST-main/rasters/IAN_2022_adv33_e10_ResultMaskRaster.tif \
+  --output outputs/fast_input.csv \
+  --flc CoastalA
 
-# Convert SLOSH to raster
-python scripts/slosh_to_raster.py --basin ny3mom --category 3 --tide high
+# Convert SLOSH parquet to raster
+python scripts/slosh_to_raster.py \
+  --parquet data/slosh/ny3mom.parquet \
+  --output FAST-main/rasters/ny3mom_cat3_mean.tif \
+  --category 3 --scenario mean
 
 # Validate pipeline output
 python scripts/validate_pipeline.py --predictions path/to/output.csv
