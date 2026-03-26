@@ -1,13 +1,13 @@
 """H3 hexagonal pre-indexing for fast spatial filtering of NSI buildings against flood rasters."""
 
 import argparse
-import numpy as np
+
 import h3
-import rasterio
-from rasterio.transform import xy
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pyarrow.compute as pc
+import rasterio
+from rasterio.transform import xy
 
 
 def raster_to_h3_cells(raster_path: str, resolution: int = 7, stride: int = 4) -> set[str]:
@@ -26,6 +26,7 @@ def raster_to_h3_cells(raster_path: str, resolution: int = 7, stride: int = 4) -
         # xs/ys are in CRS coords; reproject to lon/lat if needed
         if src.crs and not src.crs.is_geographic:
             from pyproj import Transformer
+
             transformer = Transformer.from_crs(src.crs, "EPSG:4326", always_xy=True)
             xs, ys = transformer.transform(xs, ys)
 
@@ -44,10 +45,7 @@ def filter_buildings_by_h3(
     lats = table.column(lat_col).to_pylist()
     lons = table.column(lon_col).to_pylist()
 
-    keep = [
-        h3.latlng_to_cell(lat, lon, resolution) in flood_cells
-        for lat, lon in zip(lats, lons)
-    ]
+    keep = [h3.latlng_to_cell(lat, lon, resolution) in flood_cells for lat, lon in zip(lats, lons)]
     return table.filter(pa.array(keep, type=pa.bool_()))
 
 

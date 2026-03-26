@@ -2,16 +2,19 @@
 """ML-based damage prediction as alternative to FAST deterministic DDFs."""
 
 import argparse
+
 import numpy as np
 import pandas as pd
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 try:
     import lightgbm as lgb
+
     _USE_LGB = True
 except ImportError:
     import xgboost as xgb
+
     _USE_LGB = False
 
 
@@ -30,6 +33,7 @@ def build_training_data(fast_output_csv, raster_path=None):
     # Sample surge depth from raster if provided
     if raster_path:
         import rasterio
+
         with rasterio.open(raster_path) as src:
             coords = list(zip(df["Longitude"], df["Latitude"]))
             df["surge_depth"] = [max(0, v[0]) for v in src.sample(coords)]
@@ -39,11 +43,15 @@ def build_training_data(fast_output_csv, raster_path=None):
         df["surge_depth"] = 0
 
     occ_dummies = pd.get_dummies(df["Occ"].astype(str).str[:3], prefix="occ")
-    features = pd.concat([
-        df[["FoundationType", "NumStories", "FirstFloorHt", "Cost", "surge_depth"]].rename(
-            columns={"Cost": "building_value"}),
-        occ_dummies,
-    ], axis=1).fillna(0)
+    features = pd.concat(
+        [
+            df[["FoundationType", "NumStories", "FirstFloorHt", "Cost", "surge_depth"]].rename(
+                columns={"Cost": "building_value"}
+            ),
+            occ_dummies,
+        ],
+        axis=1,
+    ).fillna(0)
 
     return features, df["damage_ratio"]
 
@@ -51,14 +59,17 @@ def build_training_data(fast_output_csv, raster_path=None):
 def train_damage_model(features, target):
     """Train gradient boosted model, return (model, metrics_dict)."""
     X_train, X_test, y_train, y_test = train_test_split(
-        features, target, test_size=0.2, random_state=42)
+        features, target, test_size=0.2, random_state=42
+    )
 
     if _USE_LGB:
-        model = lgb.LGBMRegressor(n_estimators=200, learning_rate=0.05,
-                                   max_depth=6, random_state=42, verbose=-1)
+        model = lgb.LGBMRegressor(
+            n_estimators=200, learning_rate=0.05, max_depth=6, random_state=42, verbose=-1
+        )
     else:
-        model = xgb.XGBRegressor(n_estimators=200, learning_rate=0.05,
-                                  max_depth=6, random_state=42, verbosity=0)
+        model = xgb.XGBRegressor(
+            n_estimators=200, learning_rate=0.05, max_depth=6, random_state=42, verbosity=0
+        )
 
     model.fit(X_train, y_train)
     preds = model.predict(X_test)

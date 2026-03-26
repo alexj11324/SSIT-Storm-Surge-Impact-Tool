@@ -4,8 +4,8 @@ import argparse
 from pathlib import Path
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.parquet as pq
-from pyarrow import lib as pa_lib
 import rasterio
 from rasterio.features import rasterize
 from rasterio.transform import from_bounds
@@ -38,7 +38,7 @@ def slosh_to_raster(
     col = f"c{category}_{scenario}"
     try:
         table = pq.read_table(parquet_path, columns=["geometry_wkt", col, "topography"])
-    except pa_lib.ArrowInvalid as exc:
+    except pa.ArrowInvalid as exc:
         raise ValueError(
             "SLOSH parquet must include geometry_wkt, topography, and scenario column {col}".format(
                 col=col
@@ -89,10 +89,16 @@ def slosh_to_raster(
 
     Path(output_tif).parent.mkdir(parents=True, exist_ok=True)
     with rasterio.open(
-        output_tif, "w", driver="GTiff",
-        height=height, width=width, count=1,
-        dtype="float32", crs=crs,
-        transform=transform, nodata=NODATA,
+        output_tif,
+        "w",
+        driver="GTiff",
+        height=height,
+        width=width,
+        count=1,
+        dtype="float32",
+        crs=crs,
+        transform=transform,
+        nodata=NODATA,
     ) as dst:
         dst.write(raster, 1)
 

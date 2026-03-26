@@ -1,335 +1,179 @@
 # Immediate Tsunami and Storm Surge Population Impact Modeling
 
-A rapid, programmatic geospatial data pipeline bridging predictive hurricane water models with FEMA's deep structural damage index. Designed to equip the American Red Cross and mass-care planners with data-driven shelter placement estimates within hours of severe weather advisories, without the latency of relational database bottlenecks.
+CMU Heinz MSPPM 2026 Capstone Project for the American Red Cross.
 
-## Key Features
+Property-level storm surge/tsunami impact modeling using FEMA's FAST tool, USACE National Structure Inventory (30M+ buildings), and NOAA SLOSH surge models. Estimates building damage, displaced population, and high-need populations to inform Red Cross shelter and casework planning.
 
-- **No-DB "Storage-as-Compute" Engine**: Exclusively pivots around `DuckDB` pulling S3 `.parquet` objects, entirely side-stepping SQL Database IOPS bottlenecks.
-- **Headless FEMA Assessment**: Hooks into FEMA's native FAST python core to probabilistically assess the physical damage percentage on millions of granular structures. 
-- **Geospatial Parallelism**: Sub-divides NOAA's SLOSH `.tif` warning grids and maps them identically onto USACE's National Structure Inventory (NSI) to produce real-time county-by-county impact analytics.
+## Architecture
 
----
+```
+NSI Parquet --> DuckDB: clean/filter/dedup/map --> FAST CSV -+
+NHC P-Surge GeoTIFF (.tif) --------------------------------+-> FAST engine -> damage predictions
+```
 
-## Tech Stack
-
-- **Language**: Python 3.10+
-- **Core Architecture Framework**: `duckdb` for in-memory analytics; `pyarrow` for columnar format streaming.
-- **Geodata Tooling**: `rasterio` (for TIFF grids), `geopandas` (for vector boundaries), `h3` (for hex grids).
-- **Physical Model**: FEMA Flood Assessment Structure Tool (FAST) headless engine.
-- **Infrastructure**: AWS S3 (Blobs), AWS EC2 Spot Instances (Batch Worker Nodes), AWS Athena.
-
----
+See `docs/shelter_demand_pipeline.md` for the full Mermaid diagram.
 
 ## Prerequisites
 
-- **Python**: Version 3.10+ (via pyenv or native)
-- **Conda/Mamba**: For clean distribution of GIS wheels (especially GDAL/Rasterio)
-- **AWS CLI**: Pre-configured environment containing valid IAM roles (`aws configure`).
-
----
-
-## Getting Started
-
-### 1. Clone the Repository
+- Python 3.10+
+- FAST engine (`FAST-main/Python_env/run_fast.py`)
 
 ```bash
-git clone https://github.com/alexj11324/ARC_Capstone.git
-cd ARC_Capstone
+pip install pyarrow rasterio pyyaml h3 duckdb geopandas
+pip install ruff  # linting
 ```
 
-### 2. Setup the Python Environment
-
-Due to native C-bindings used by geospatial tooling, installing pure headers via Conda is recommended over native Pip.
+## Quick Start
 
 ```bash
-conda create -n arc-pipeline python=3.10 -y
-conda activate arc-pipeline
-pip install duckdb pyarrow pandas geopandas rasterio pypdf pyyaml h3
+# Run the primary pipeline (DuckDB SQL → FAST CSV)
+python scripts/duckdb_fast_pipeline.py \
+  --parquet-glob "nsi/state=FL/*.parquet" \
+  --raster FAST-main/rasters/IAN_2022_adv33_e10_ResultMaskRaster.tif \
+  --output outputs/fast_input.csv \
+  --flc CoastalA
+
+# Convert SLOSH parquet to raster
+python scripts/slosh_to_raster.py \
+  --parquet data/slosh/ny3mom.parquet \
+  --output FAST-main/rasters/ny3mom_cat3_mean.tif \
+  --category 3 --scenario mean
+
+# Validate pipeline output
+python scripts/validate_pipeline.py --predictions path/to/output.csv
 ```
 
-### 3. Execution Setup Matrix
+## Project Structure
 
-The base execution revolves around NOAA models. Ensure you configure your states inside the YAML system.
+```
+scripts/
+  duckdb_fast_pipeline.py   # Primary pipeline: NSI Parquet -> FAST CSV -> FAST
+  nsi_raw_to_parquet.py     # Raw NSI -> processed Parquet conversion
+  h3_spatial_index.py       # H3 hex spatial pre-filtering
+  slosh_to_raster.py        # SLOSH Parquet -> GeoTIFF converter
+  validate_pipeline.py      # Post-run validation: schema + stats
+  ml_damage_model.py        # ML-based damage model (experimental)
+tests/
+  conftest.py               # Shared pytest fixtures
+notebooks/
+  shelter_demand.ipynb            # BHI shelter demand estimation (Colab)
+configs/
+  event_state_map.yaml      # Hurricane -> affected states + raster patterns
+docs/
+  shelter_demand_pipeline.md # Pipeline architecture with BHI model (Mermaid)
+  ddf_analysis.md           # Depth-damage function analysis
+  reflection.md             # Project insights and learnings
+  nsi_data_dictionary.md    # NSI field definitions (EN/ZH)
+FAST-main/
+  Python_env/run_fast.py    # FAST headless engine (production)
+```
+
+## Data Sources
+
+| Source | Description | Format |
+|--------|-------------|--------|
+| NSI | USACE National Structure Inventory 2022 | Parquet, partitioned by state |
+| SLOSH | NOAA MOM surge grids | Parquet, partitioned by basin |
+| SVI | CDC Social Vulnerability Index | Census tract level |
+
+## Linting
 
 ```bash
-# Modify routing behaviors here
-nano configs/event_state_map.yaml
+ruff check scripts/          # lint
+ruff format scripts/         # auto-format
 ```
 
-### 4. Running Pipeline Modules Locally
+Config in `pyproject.toml` (E/F/W/I rules, line-length 100, Python 3.10+).
 
-*Run Core Damage Engine (preferred — DuckDB pipeline):*
-```bash
-python scripts/duckdb_fast_pipeline.py --state Florida
-```
+## Key Documentation
 
-*Run Core Damage Engine (legacy — row-by-row):*
-```bash
-python scripts/fast_e2e_from_oracle.py --state-scope Florida --raster-name auto --config configs/fast_e2e.yaml
-```
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | AI agent instructions, data contracts, critical gotchas |
+| `AGENTS.md` | Execution contract, column mapping rules, guardrails |
+| `docs/shelter_demand_pipeline.md` | Pipeline architecture with BHI shelter demand model (Mermaid) |
+| `docs/nsi_data_dictionary.md` | NSI field definitions (English + Chinese) |
 
-> **Note**: `slosh_to_raster.py` is legacy. The active pipeline uses NHC P-Surge GeoTIFF rasters downloaded directly from NHC — no conversion needed.
+## Output
+
+Per-building: `BldgDmgPct` (% damaged), `BldgLossUSD` ($ loss), `Depth_in_Struc` (ft). These feed into population disruption and Red Cross service demand estimates.
 
 ---
 
-## Architecture Overview
+## Prediction Results
 
-This section is for engineers inheriting the pipeline. Instead of relying on a multi-hour RDBMS spatial query, we rely on decoupled Bash nodes interacting seamlessly via DuckDB.
+Results for 9 hurricane events x 3 advisories (27 runs, ~3.9M building predictions):
 
-### Directory Structure
+**Coverage**
 
-```text
-ARC_Capstone/
-├── configs/                 # YAML Event Router and end-to-end execution constants
-├── data/                    # Ground truth, Excel interface, reference datasets
-├── docs/
-│   ├── architecture/        # E2E pipeline diagrams, C4 diagrams
-│   ├── manual/              # Long-form system manual
-│   └── wiki/                # Onboarding tutorials
-├── FAST-main/               # Embedded FEMA FAST Assessment core module
-├── notebooks/               # Colab notebooks (shelter demand, L/M/H deploy)
-├── outputs/                 # Pipeline output artifacts
-└── scripts/                 # Core Pipeline operations
-    ├── duckdb_fast_pipeline.py    # Spatial intersections and logic orchestration
-    ├── import_nhc_by_storm.py     # NHC P-Surge raster download
-    ├── slosh_to_raster.py         # Sub-process building GeoTIFF from points
-    ├── deploy_to_instances.py     # Remote AWS node bootstrapping
-    └── launch_cloud_parallel.sh   # Ephemeral execution trigger
-```
+| Event | Advisories | Buildings | Notes |
+|-------|-----------|-----------|-------|
+| BERYL_2024 | 39, 40, 41 | ~107K each | TX/LA Gulf Coast |
+| DEBBY_2024 | 18, 19, 20 | ~103K each | FL/GA/NC/SC/VA |
+| FLORENCE_2018 | 63, 64, 65 | 17K-32K | NC/SC/VA Atlantic |
+| HELENE_2024 | 14, 15, 16 | 240K-475K | FL/GA/NC/SC |
+| IAN_2022 | 31, 32, 33 | ~119K-122K | FL/NC/SC |
+| IDALIA_2023 | 18, 19, 20 | 62K-124K | FL/GA/SC |
+| IDA_2021 | 16, 17, 18 | ~412K each | AL/LA/MS |
+| MICHAEL_2018 | 20, 21, 22 | ~900 each | Coastal GA (small raster footprint) |
+| MILTON_2024 | 20, 21, 22 | 70K-208K | FL |
 
-### Data Flow Execution
+### Output Column Reference
 
-1. **Raster acquisition**: NHC P-Surge GeoTIFF rasters are downloaded directly from NHC (via `import_nhc_by_storm.py` or manually). The legacy `slosh_to_raster.py` is no longer used.
-2. **NSI loading**: `PyArrow` reads NSI Parquet files (partitioned by state, from local disk or S3).
-3. **Spatial filtering**: `duckdb_fast_pipeline.py` initializes a DuckDB in-memory engine, applies bbox clipping, deduplicates by building ID, and maps NSI columns to FAST schema.
-4. **FAST input**: Matching buildings are exported as `fast_input.csv` to the local file system.
-5. **Damage scoring**: The FEMA FAST engine (`run_fast.py`) reads the structures, applies depth-damage functions by occupancy type, and produces `BldgDmgPct`.
-6. **Upload**: Results are mapped back to S3 for Red Cross operators to query in Athena.
+**Building Attributes**
 
----
+| Column | Description |
+|--------|-------------|
+| `FltyId` | NSI unique building ID |
+| `Occ` | Occupancy type (RES1=single-family, RES3=multi-family, COM1=commercial) |
+| `Cost` | Replacement cost ($) |
+| `Area` | Floor area (sqft) |
+| `NumStories` | Stories above ground |
+| `FoundationType` | 2=Pier, 4=Basement, 5=Crawlspace, 7=Slab |
+| `FirstFloorHt` | First floor height above grade (ft) |
+| `Latitude` / `Longitude` | WGS84 coordinates |
+| `state` | State name |
 
-## Environment Variables
+**Flood Depth**
 
-For security bounds, do NOT commit actual AWS keys into the version log or YAML definitions!
+| Column | Description |
+|--------|-------------|
+| `Depth_Grid` | Surge depth from SLOSH raster at building location (ft) |
+| `Depth_in_Struc` | Effective depth inside structure = Depth_Grid - FirstFloorHt (ft) |
 
-### Required System Environments
+**Damage & Loss**
 
-| Variable | Description |
-| --- | --- |
-| `AWS_ACCESS_KEY_ID` | User IAM to read NSI baseline objects |
-| `AWS_SECRET_ACCESS_KEY` | User IAM password key |
-| `AWS_DEFAULT_REGION` | Usually `us-east-1` or `us-west-2` |
+| Column | Description |
+|--------|-------------|
+| `BldgDmgPct` | Structural damage percentage (%) |
+| `BldgLossUSD` | Structural loss ($) |
+| `ContentCost` | Contents replacement value ($) |
+| `ContDmgPct` | Contents damage percentage (%) |
+| `ContentLossUSD` | Contents loss ($) |
+| `InventoryLossUSD` | Inventory loss ($ - commercial buildings) |
 
----
+**Debris & Recovery**
 
-## Available Scripts
+| Column | Description |
+|--------|-------------|
+| `Debris_Fin` | Finish debris (tons) |
+| `Debris_Struc` | Structural debris (tons) |
+| `Debris_Found` | Foundation debris (tons) |
+| `Debris_Tot` | Total debris (tons) |
+| `Restor_Days_Min` / `Restor_Days_Max` | Estimated restoration days (range) |
 
-| Tool/Command | Responsibility |
-| --- | --- |
-| `python scripts/fast_e2e_from_oracle.py` | Runs End-to-End local batch node. |
-| `bash scripts/launch_cloud_parallel.sh` | Orchestrates remote spinning via Boto3/CLI. |
-| `bash scripts/monitor_parallel.sh` | Hooks into EC2/Batch lifecycle stream and surfaces active outputs to host. |
-| `bash scripts/terminate_parallel.sh` | Safety parachute destroying active run queues. |
+**Partition & Provenance**
 
----
-
-## Pipeline 2: L/M/H Population Impact
-
-After Pipeline 1 (FAST Damage Engine) produces building-level damage predictions, Pipeline 2 classifies them into **Low / Medium / High intensity zones** and aggregates to county-level population estimates for Red Cross mass care planning.
-
-### Data Flow
-
-```
-FAST Building Predictions (Athena)
-  → Dedup across advisories (MAX damage per building)
-  → Classify intensity zone per building (surge depth + damage %)
-  → Spatial join to county (ST_CONTAINS)
-  → County × zone aggregation
-  → Census population join
-  → SVI join + conditional bump (HIGH zone only)
-  → ARC conversion rates → shelter / feeding estimates
-```
-
-### Intensity Zone Classification
-
-Each building is classified based on surge depth (primary) with damage % fallback:
-
-| Zone | Surge Depth | Damage % (fallback) |
-|------|-------------|---------------------|
-| **HIGH** | > 12 ft | > 35% |
-| **MEDIUM** | 9–12 ft | 15–35% |
-| **LOW** | 4–8 ft | > 0% |
-
-Source: ARC Mass Care Planning Assumptions Job Tool V.6.0, Figures 9–10.
-
-### ARC Conversion Rates
-
-| Impact Zone | Shelter % | Feeding % |
-|-------------|-----------|-----------|
-| HIGH | 5.0% | 12.0% |
-| MEDIUM | 3.0% | 7.0% |
-| LOW | 1.0% | 3.0% |
-
-### Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `scripts/04_classify_lmh.py` | Athena query: dedup → L/M/H classification → county aggregation |
-| `scripts/05_format_for_spreadsheet.py` | Census join + SVI join + SVI bump + ARC rates → CSV/Excel |
-| `scripts/06_validate_lmh.py` | Validation against ground truth (RMSE, MAE, R²) |
-
-### Running Pipeline 2
-
-```bash
-cd .
-
-# Step 1: Classify and aggregate (requires AWS credentials for Athena)
-python scripts/04_classify_lmh.py --output-dir data
-
-# Step 2: Format for ARC spreadsheet (SVI bump enabled by default)
-python scripts/05_format_for_spreadsheet.py \
-  --input data/county_lmh_features.csv \
-  --census data/census_county_population.csv \
-  --svi data/svi_county.csv \
-  --output-dir outputs
-
-# Step 3: Validate against ground truth
-python scripts/06_validate_lmh.py
-```
-
-### Output
-
-- `planning_assumptions_output.csv` — county-level L/M/H population estimates
-- `arc_planning_template_lmh.xlsx` — Excel with Estimates + Parameters sheets
-- `lmh_validation_report.md` — accuracy metrics vs historical events
-
-Full architecture diagram: [`docs/architecture/e2e_pipeline.md`](docs/architecture/e2e_pipeline.md)
+| Column | Description |
+|--------|-------------|
+| `event` | Hurricane event slug |
+| `adv` | Advisory number |
+| `raster_name` | Source SLOSH raster filename |
+| `run_id` | Pipeline run ID (timestamp-based) |
+| `flc` | Flood class: CoastalA / CoastalV / Riverine |
 
 ---
 
-## Pipeline 3: Shelter Demand Model (Census Tract, Colab)
+## Team
 
-A more granular shelter demand estimation pipeline that runs entirely in Google Colab. Uses the **Building Habitability Index (BHI)** methodology with configurable parameters from an Excel interface.
-
-### Key Differences from Pipeline 2
-
-| | Pipeline 2 (L/M/H) | Pipeline 3 (Shelter Demand) |
-|---|---|---|
-| Granularity | County | Census tract |
-| Damage classification | 3 zones (L/M/H) by surge depth | 4 states (Slight/Moderate/Extensive/Complete) by BldgDmgPct |
-| Shelter conversion | ARC fixed rates (5%/3%/1%) | BHI factor (usability × utility loss × SVI mapping) |
-| Output | Point estimate | Low/high range |
-| Runs on | Local + AWS Athena | Google Colab (no AWS) |
-
-### How to Use
-
-1. Open `ARC Storm Surge Shelter Demand.xlsx`, fill in storm parameters (Step 1)
-2. Copy the JSON params from Step 6
-3. Open [`shelter_demand.ipynb`](notebooks/shelter_demand.ipynb) in Colab
-4. Paste params into Cell 2, Run All
-5. Copy results back into Excel Step 7
-
-### Core Formula
-
-```
-shelter_seeking = population × BHI_factor × SVI_Value_Mapped
-
-BHI_factor = Σ_d fraction_d × [
-    USABILITY[d][FU] × UL_SEVERITY[risk][FU][bound] +
-    USABILITY[d][PU] × UL_SEVERITY[risk][PU][bound] +
-    USABILITY[d][NU] × 1.0
-]
-```
-
-Full architecture diagram: [`docs/architecture/shelter_demand_pipeline.md`](docs/architecture/shelter_demand_pipeline.md)
-
----
-
-## SVI (Social Vulnerability Index) Adjustment
-
-The population impact pipeline applies a **conditional SVI bump** to HIGH intensity zones. Counties with higher social vulnerability (elderly, low-income, minority, housing-insecure populations) generate disproportionately higher demand for Red Cross services when severely impacted.
-
-### How it works
-
-```
-pop_impacted_high_adjusted = pop_impacted_high × (1 + SVI_BUMP_WEIGHT × svi_score)
-```
-
-- **`svi_score`**: CDC SVI 2022 county-level overall percentile (`RPL_THEMES`, range 0–1). Downloaded automatically from CDC on first run.
-- **`SVI_BUMP_WEIGHT`**: Default **0.20** — a county with SVI=1.0 (most vulnerable) gets a 20% uplift on HIGH zone estimates; SVI=0 gets no bump.
-- The bump only applies to **HIGH** intensity zones. Medium and Low zones are unchanged.
-
-### Tuning the default
-
-> **The default weight of 0.20 is a starting point and should be calibrated against ground truth data.** Run `06_validate_lmh.py` with different `--svi-bump-weight` values and compare RMSE/MAE against historical events to find the optimal weight for your planning region.
-
-```bash
-# Default (20% max bump)
-python 05_format_for_spreadsheet.py
-
-# More aggressive bump (30%)
-python 05_format_for_spreadsheet.py --svi-bump-weight 0.30
-
-# Disable SVI adjustment entirely
-python 05_format_for_spreadsheet.py --no-svi
-```
-
-| SVI Score | Bump (weight=0.20) | Bump (weight=0.30) |
-|-----------|-------------------|-------------------|
-| 0.0 | +0% | +0% |
-| 0.25 | +5% | +7.5% |
-| 0.50 | +10% | +15% |
-| 0.75 | +15% | +22.5% |
-| 1.00 | +20% | +30% |
-
-Data source: [CDC/ATSDR SVI 2022](https://www.atsdr.cdc.gov/placeandhealth/svi/index.html)
-
----
-
-## Testing
-
-*(Governed by Strict TDD under Conductor Rules)*
-
-Execute all local unit tests (if configured via `pytest`) prior to PR generation, specifically mocking the `aws_s3_read()` logic utilizing mock parquet stubs locally to verify matrix offsets independent of cloud uptime.
-
-```bash
-# E.g.
-pytest tests/
-```
-
----
-
-## Deployment
-
-The system is deployed purely as ephemeral functions without long-standing web servers.
-
-### AWS Spot Execution (Production Pattern)
-
-To operate over 30 states, do not trigger entirely locally:
-
-```bash
-# Deploys Python environment onto nodes, triggers intersections concurrently 
-bash scripts/launch_cloud_parallel.sh --regions us-east-1 --max-nodes 10
-```
-
-### AWS Athena (Final Serving)
-
-Instead of a DB connection string, Red Cross analysts configure Excel using AWS ODBC Athena Plugin targeting the output S3 bucket defined in `configs/fast_e2e.yaml`.
-
----
-
-## Troubleshooting
-
-### Spatial Dependency Errors
-
-**Error**: `ModuleNotFoundError: No module named 'rasterio._base'` or GDAL conflict.
-**Solution**: Never try to pip install rasterio on Windows cleanly. Use conda exclusively: `conda install conda-forge::rasterio`. 
-
-### FAST Engine Fails to Evaluate
-
-**Error**: `ValueError: Missing required FAST column 'FirstFloorHt'`
-**Solution**: Occurs if the DuckDB extraction query drops or renames NSI columns. Review `duckdb_fast_pipeline.py` schema output map and cross reference against expected headers inside `FAST-main/run_fast.py`.
-
-### S3 Permission Denied
-**Error**: `ArrowIOError: AWS Error ACCESS_DENIED`
-**Solution**: Verify your AWS CLI is authenticated (`aws sts get-caller-identity`). Re-authenticate your SSO/MFA payload if expired.
+CMU Heinz College — Master of Science in Public Policy and Management, 2026

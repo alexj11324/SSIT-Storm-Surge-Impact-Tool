@@ -9,46 +9,47 @@ from __future__ import annotations
 import argparse
 import glob
 import sys
-from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 # Target schema — must match existing processed parquet (e.g. Alabama)
-TARGET_SCHEMA = pa.schema([
-    ("bid", pa.string()),
-    ("bldgtype", pa.string()),
-    ("cbfips", pa.string()),
-    ("fd_id", pa.int64()),
-    ("firmzone", pa.string()),
-    ("found_ht", pa.float64()),
-    ("found_type", pa.string()),
-    ("ftprntid", pa.string()),
-    ("ftprntsrc", pa.string()),
-    ("ground_elv", pa.float64()),
-    ("ground_elv_m", pa.float64()),
-    ("med_yr_blt", pa.int64()),
-    ("num_story", pa.int64()),
-    ("o65disable", pa.float64()),
-    ("occtype", pa.string()),
-    ("pop2amo65", pa.int64()),
-    ("pop2amu65", pa.int64()),
-    ("pop2pmo65", pa.int64()),
-    ("pop2pmu65", pa.int64()),
-    ("source", pa.string()),
-    ("sqft", pa.float64()),
-    ("st_damcat", pa.string()),
-    ("students", pa.int64()),
-    ("u65disable", pa.float64()),
-    ("val_cont", pa.float64()),
-    ("val_struct", pa.float64()),
-    ("val_vehic", pa.int64()),
-    ("x", pa.float64()),
-    ("y", pa.float64()),
-    ("longitude", pa.float64()),
-    ("latitude", pa.float64()),
-    ("processed_at", pa.timestamp("ns")),
-])
+TARGET_SCHEMA = pa.schema(
+    [
+        ("bid", pa.string()),
+        ("bldgtype", pa.string()),
+        ("cbfips", pa.string()),
+        ("fd_id", pa.int64()),
+        ("firmzone", pa.string()),
+        ("found_ht", pa.float64()),
+        ("found_type", pa.string()),
+        ("ftprntid", pa.string()),
+        ("ftprntsrc", pa.string()),
+        ("ground_elv", pa.float64()),
+        ("ground_elv_m", pa.float64()),
+        ("med_yr_blt", pa.int64()),
+        ("num_story", pa.int64()),
+        ("o65disable", pa.float64()),
+        ("occtype", pa.string()),
+        ("pop2amo65", pa.int64()),
+        ("pop2amu65", pa.int64()),
+        ("pop2pmo65", pa.int64()),
+        ("pop2pmu65", pa.int64()),
+        ("source", pa.string()),
+        ("sqft", pa.float64()),
+        ("st_damcat", pa.string()),
+        ("students", pa.int64()),
+        ("u65disable", pa.float64()),
+        ("val_cont", pa.float64()),
+        ("val_struct", pa.float64()),
+        ("val_vehic", pa.int64()),
+        ("x", pa.float64()),
+        ("y", pa.float64()),
+        ("longitude", pa.float64()),
+        ("latitude", pa.float64()),
+        ("processed_at", pa.timestamp("ns")),
+    ]
+)
 
 TARGET_COLUMNS = [f.name for f in TARGET_SCHEMA]
 
@@ -68,8 +69,16 @@ def _convert_duckdb(input_path: str, output_path: str) -> int:
     except Exception:
         srid = 4326  # assume WGS84 if detection fails
 
-    geom_x = "ST_X(ST_Transform(geom, 'EPSG:4326', 'EPSG:4326'))" if srid == 4326 else f"ST_X(ST_Transform(geom, 'EPSG:{srid}', 'EPSG:4326'))"
-    geom_y = "ST_Y(ST_Transform(geom, 'EPSG:4326', 'EPSG:4326'))" if srid == 4326 else f"ST_Y(ST_Transform(geom, 'EPSG:{srid}', 'EPSG:4326'))"
+    geom_x = (
+        "ST_X(ST_Transform(geom, 'EPSG:4326', 'EPSG:4326'))"
+        if srid == 4326
+        else f"ST_X(ST_Transform(geom, 'EPSG:{srid}', 'EPSG:4326'))"
+    )
+    geom_y = (
+        "ST_Y(ST_Transform(geom, 'EPSG:4326', 'EPSG:4326'))"
+        if srid == 4326
+        else f"ST_Y(ST_Transform(geom, 'EPSG:{srid}', 'EPSG:4326'))"
+    )
 
     if srid == 4326:
         geom_x, geom_y = "ST_X(geom)", "ST_Y(geom)"
@@ -103,9 +112,7 @@ def _convert_duckdb(input_path: str, output_path: str) -> int:
     """
 
     con.execute(sql)
-    count = con.execute(
-        f"SELECT COUNT(*) FROM read_parquet('{output_path}')"
-    ).fetchone()[0]
+    count = con.execute("SELECT COUNT(*) FROM read_parquet(?)", [output_path]).fetchone()[0]
     con.close()
     return count
 
@@ -190,8 +197,12 @@ def main():
     )
     parser.add_argument("--input", required=True, help="Path to GPKG/GeoJSON (or glob)")
     parser.add_argument("--output", required=True, help="Output parquet path")
-    parser.add_argument("--engine", default="duckdb", choices=["duckdb", "geopandas"],
-                        help="Processing engine (default: duckdb)")
+    parser.add_argument(
+        "--engine",
+        default="duckdb",
+        choices=["duckdb", "geopandas"],
+        help="Processing engine (default: duckdb)",
+    )
     args = parser.parse_args()
 
     try:

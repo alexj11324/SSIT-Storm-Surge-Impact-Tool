@@ -1,14 +1,22 @@
 """DuckDB-based FAST CSV pipeline — replaces row-by-row Python with a single SQL pass."""
 
 import argparse
+
 import duckdb
 import rasterio
 from rasterio.warp import transform_bounds
 
-
 FAST_INPUT_COLUMNS = [
-    "FltyId", "Occ", "Cost", "Area", "NumStories",
-    "FoundationType", "FirstFloorHt", "ContentCost", "Latitude", "Longitude",
+    "FltyId",
+    "Occ",
+    "Cost",
+    "Area",
+    "NumStories",
+    "FoundationType",
+    "FirstFloorHt",
+    "ContentCost",
+    "Latitude",
+    "Longitude",
 ]
 
 
@@ -92,9 +100,7 @@ def build_fast_csv_duckdb(
     """
 
     con.execute(sql)
-    count = con.execute(
-        f"SELECT COUNT(*) FROM read_csv_auto('{output_csv}')"
-    ).fetchone()[0]
+    count = con.execute("SELECT COUNT(*) FROM read_csv_auto(?)", [output_csv]).fetchone()[0]
     con.close()
     return count
 

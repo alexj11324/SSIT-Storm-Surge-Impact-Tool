@@ -8,7 +8,7 @@ Follow these rules by default unless the user explicitly overrides them.
 Primary production path:
 
 1. Use NSI processed data to build FAST-ready building inventory CSV.
-2. Use NHC P-Surge GeoTIFF rasters (downloaded directly from NHC) as flood depth input.
+2. Use SLOSH processed data to produce flood depth raster (`.tif`).
 3. Run FAST headless (no GUI) and generate FAST output CSV artifacts.
 
 Do not introduce unrelated architecture changes unless requested.
@@ -66,9 +66,15 @@ Keep and populate these columns:
 9. `longitude` -> `Longitude`
 10. `val_cont` -> `ContentCost` (optional)
 
-### 4.2 P-Surge Rasters
+### 4.2 SLOSH -> Raster
 
-Rasters are downloaded directly from NHC as GeoTIFF (`.tif`) in feet. No SLOSH-to-raster conversion needed.
+Use SLOSH fields to build raster; FAST does not consume SLOSH parquet directly:
+
+1. Geometry: `geometry_wkt`
+2. Surge scenario value: one of `cN_mean` / `cN_high` (N=0..5)
+3. Terrain adjustment as needed: `topography`
+
+Output must be GeoTIFF (`.tif`) in feet.
 
 ## 5. Default Hazard Choice Policy
 
@@ -102,11 +108,6 @@ Ask only when blocked by missing irrecoverable inputs, such as:
 
 When asking, provide exactly what is missing and a recommended default.
 
-### 6.3 Self-Serve Before Asking (Global)
-
-Before asking any question, you must first search for relevant tools, CLI commands, and files in this repo.
-Do not ask for information that is discoverable from tools, the CLI, or the filesystem.
-
 ## 7. Output Standards
 
 1. Prefer deterministic, reproducible scripts and commands.
@@ -118,26 +119,13 @@ Do not ask for information that is discoverable from tools, the CLI, or the file
 
 1. Do not silently alter business assumptions.
 2. Do not switch data model without explicit request.
-3. Do not expand scope to OCI/DB refactors unless user asks.
-4. Keep changes focused on NSI -> FAST CSV, P-Surge rasters, and FAST execution.
+3. Do not expand scope to infrastructure refactors unless user asks.
+4. Keep changes focused on NSI -> FAST CSV, SLOSH -> raster, and FAST execution.
 
-## 9. Skill Routing for Repository Organization
+## 9. Data Processing Policy
 
-When user intent is repository organization, default to the `repo-ia-reorg` skill without requiring explicit skill mention.
-
-### 9.1 Auto-trigger keywords
-
-Trigger on organization intents including:
-
-1. "organize", "organization", "tidy", "clean up", "declutter"
-2. "reorg", "reorganize", "restructure"
-3. Chinese intents like "组织", "整理", "重整", "信息架构重排", "代码库太乱"
-
-### 9.2 `rebase` disambiguation rule
-
-`rebase` alone is not a trigger. Use `repo-ia-reorg` only when `rebase` appears with structure-cleanup context, such as:
-
-1. root/docs/path/layout reorganization
-2. file moves, archive consolidation, or IA cleanup
-
-If `rebase` is requested as a pure git-history operation, do not trigger this skill.
+1. Primary execution environment: local Python or Google Colab.
+2. NSI data is downloaded via the project's NSI download workflow and stored as local Parquet files.
+3. NHC P-Surge rasters are downloaded directly from NHC and stored in `FAST-main/rasters/`.
+4. Pipeline execution uses `scripts/duckdb_fast_pipeline.py` (DuckDB SQL) for all data transformation.
+5. Shelter demand analysis runs in Google Colab via `notebooks/shelter_demand.ipynb`.

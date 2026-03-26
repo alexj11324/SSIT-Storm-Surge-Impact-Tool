@@ -1,0 +1,31 @@
+[project]
+name = "tsspim"
+version = "0.1.0"
+description = "Tsunami and Storm Surge Population Impact Modeling — CMU Heinz ARC Capstone"
+requires-python = ">=3.10"
+dependencies = [
+    "pyarrow",
+    "rasterio",
+    "pyyaml",
+    "h3",
+    "duckdb",
+    "geopandas",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+ml = ["scikit-learn", "lightgbm", "xgboost"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["notebooks/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"FAST-main/**" = ["ALL"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "FAST-main/tests"]
