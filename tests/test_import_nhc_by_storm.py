@@ -51,7 +51,9 @@ def test_importer_returns_states_and_readable_raster(mock_states, mock_sjoin):
     mock_session.get.return_value = _DummyResponse(zip_bytes)
 
     state_geom = box(-1, -1, 1, 1)
-    states_gdf = gpd.GeoDataFrame({"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326")
+    states_gdf = gpd.GeoDataFrame(
+        {"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326"
+    )
     mock_states.return_value = states_gdf
     mock_sjoin.return_value = states_gdf
 
@@ -77,7 +79,9 @@ def test_importer_handles_no_overlapping_states(mock_states, mock_sjoin):
 
     geom = box(-1, -1, 1, 1)
     empty_gdf = gpd.GeoDataFrame({"NAME": [], "geometry": []}, geometry="geometry", crs="EPSG:4326")
-    mock_states.return_value = gpd.GeoDataFrame({"NAME": ["Other"], "geometry": [geom]}, crs="EPSG:4326")
+    mock_states.return_value = gpd.GeoDataFrame(
+        {"NAME": ["Other"], "geometry": [geom]}, crs="EPSG:4326"
+    )
     mock_sjoin.return_value = empty_gdf
 
     result = nhc.import_surge_data("AL0224", "BERYL", 29, 2024, session=mock_session, timeout=5)

@@ -31,7 +31,8 @@ We achieve this via:
 2. **Download a P-Surge raster**
    Download NHC P-Surge rasters for a storm event:
    ```bash
-   python scripts/import_nhc_by_storm.py --storm IAN --year 2022 --advisory 33
+   # Edit storm parameters at the bottom of the script, then run:
+   python scripts/import_nhc_by_storm.py
    ```
 3. **Run the primary pipeline**
    ```bash

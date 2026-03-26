@@ -88,7 +88,9 @@ def import_surge_data(
 
     with zipfile.ZipFile(zip_in_memory, "r") as z:
         if tif_filename_in_zip not in z.namelist():
-            raise FileNotFoundError(f"{tif_filename_in_zip} not found in archive (available: {z.namelist()})")
+            raise FileNotFoundError(
+                f"{tif_filename_in_zip} not found in archive (available: {z.namelist()})"
+            )
 
         print(f"Reading {tif_filename_in_zip} from archive...")
         with z.open(tif_filename_in_zip) as tif_file:
@@ -97,7 +99,9 @@ def import_surge_data(
     surge_data = MemoryFile(tif_bytes).open()
 
     surge_bounds = surge_data.bounds
-    surge_polygon = box(surge_bounds.left, surge_bounds.bottom, surge_bounds.right, surge_bounds.top)
+    surge_polygon = box(
+        surge_bounds.left, surge_bounds.bottom, surge_bounds.right, surge_bounds.top
+    )
     surge_extent_gdf = gpd.GeoDataFrame({"id": 1, "geometry": [surge_polygon]}, crs=surge_data.crs)
 
     us_states = states(cb=True, cache=True, year=year)
@@ -122,7 +126,9 @@ if __name__ == "__main__":
     year = 2024
 
     ## - get storm surge data and relevant states
-    surge_dict = import_surge_data(storm_id=storm_id, storm_name=storm_name, adv=advisory_no, year=year)
+    surge_dict = import_surge_data(
+        storm_id=storm_id, storm_name=storm_name, adv=advisory_no, year=year
+    )
     surge_data = surge_dict["data"]
     surge_states = surge_dict["states"]
     print(f"States in the storm surge data for {storm_name}: {surge_states}")

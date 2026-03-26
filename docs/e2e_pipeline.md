@@ -19,8 +19,8 @@ graph TD
         FAST["FAST Depth-Damage Lookup<br/>raster depth at lat/lon<br/>− FirstFloorHt → DDF by occupancy"]
     end
 
-    subgraph "Stage 3: S3 / Athena"
-        S3_ATHENA["arc_storm_surge.predictions_csv<br/>~3.9M rows on S3"]
+    subgraph "Stage 3: Local Output"
+        LOCAL_OUT["predictions.csv<br/>(local output)"]
     end
 
     subgraph "Stage 4: Intensity Zone Classification"
@@ -41,9 +41,9 @@ graph TD
     NHC -->|"EVENT_YEAR_advN_e10_ResultMaskRaster.tif"| PREP
     NHC -.->|raster| FAST
     PREP -->|"fast_input.csv<br/>(FltyId, Occ, Cost, Lat, Lon, ...)"| FAST
-    FAST -->|"predictions.csv<br/>(BldgDmgPct, Depth_Grid, BldgLossUSD)"| S3_ATHENA
+    FAST -->|"predictions.csv<br/>(BldgDmgPct, Depth_Grid, BldgLossUSD)"| LOCAL_OUT
 
-    S3_ATHENA --> CLASSIFY
+    LOCAL_OUT --> CLASSIFY
     CLASSIFY -->|"county_lmh_long.csv<br/>(event × county × zone)"| PLAN
     CLASSIFY -->|"county_lmh_features.csv<br/>(event × county, wide)"| PLAN
     CENSUS --> PLAN
@@ -55,7 +55,7 @@ graph TD
     %% Styling
     style PREP fill:#2d6a4f,color:#fff
     style FAST fill:#d62828,color:#fff
-    style S3_ATHENA fill:#ff9f1c,color:#000
+    style LOCAL_OUT fill:#ff9f1c,color:#000
     style CLASSIFY fill:#457b9d,color:#fff
     style PLAN fill:#457b9d,color:#fff
     style VALIDATE fill:#457b9d,color:#fff

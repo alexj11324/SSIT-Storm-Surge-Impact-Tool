@@ -102,7 +102,8 @@ STATE_SPECS = [
 STATE_BY_FIPS = {state.fips: state for state in STATE_SPECS}
 STATE_BY_ABBR = {state.abbr: state for state in STATE_SPECS}
 STATE_BY_NAME = {
-    re.sub(r"\s+", " ", state.name.replace("-", " ").strip()).lower(): state for state in STATE_SPECS
+    re.sub(r"\s+", " ", state.name.replace("-", " ").strip()).lower(): state
+    for state in STATE_SPECS
 }
 
 
@@ -186,7 +187,9 @@ def open_url_with_retries(url: str, timeout: float, retries: int):
             if attempt > retries:
                 break
             sleep_seconds = min(5, attempt)
-            log(f"Request failed for {url} (attempt {attempt}/{retries + 1}): {exc}. Retrying in {sleep_seconds}s...")
+            log(
+                f"Request failed for {url} (attempt {attempt}/{retries + 1}): {exc}. Retrying in {sleep_seconds}s..."
+            )
             time.sleep(sleep_seconds)
     raise RuntimeError(f"failed to download NSI API response from {url}") from last_error
 
@@ -232,9 +235,10 @@ def download_state_geojson(
     temp_path = make_temp_path(destination)
     try:
         with open_url_with_retries(state.api_url, timeout=timeout, retries=retries) as response:
-            with io.TextIOWrapper(response, encoding="utf-8") as stream, temp_path.open(
-                "w", encoding="utf-8"
-            ) as handle:
+            with (
+                io.TextIOWrapper(response, encoding="utf-8") as stream,
+                temp_path.open("w", encoding="utf-8") as handle,
+            ):
                 feature_count = write_feature_collection(stream, handle)
                 handle.flush()
         bytes_written = temp_path.stat().st_size
@@ -273,9 +277,13 @@ def build_output_dir(custom_output_dir: str | None) -> Path:
     return (Path("exports") / "nsi_downloads" / run_id).resolve()
 
 
-def warn_about_runtime_risks(states: list[StateSpec], engine: str, custom_output_dir: str | None) -> None:
+def warn_about_runtime_risks(
+    states: list[StateSpec], engine: str, custom_output_dir: str | None
+) -> None:
     if engine == "geopandas":
-        large_states = [state.name for state in states if state.fips in GEOPANDAS_MEMORY_WARNING_FIPS]
+        large_states = [
+            state.name for state in states if state.fips in GEOPANDAS_MEMORY_WARNING_FIPS
+        ]
         if large_states:
             joined = ", ".join(large_states)
             log(

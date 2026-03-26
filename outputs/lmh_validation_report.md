@@ -67,7 +67,7 @@ The L/M/H pipeline has higher RMSE than both previous baselines. This is expecte
 | loose | >= 5 | >= 10 | > 13 | requires Athena re-run |
 | very_low | >= 2 | >= 6 | > 10 | requires Athena re-run |
 
-**Note**: Full reclassification requires re-running the Athena query (Phase 1) with modified surge thresholds. The current pipeline uses the 'default' thresholds (LOW >= 4ft, MEDIUM >= 9ft, HIGH > 12ft). To test alternative thresholds, modify the CASE expression in `04_classify_lmh.py` and re-run Phases 1-2.
+**Note**: Full reclassification requires re-running the pipeline (Phase 1) with modified surge thresholds. The current pipeline uses the 'default' thresholds (LOW >= 4ft, MEDIUM >= 9ft, HIGH > 12ft). To test alternative thresholds, modify the classification logic in `notebooks/shelter_demand.ipynb` and re-run Phases 1-2.
 
 ## 7. Sanity Check Results
 

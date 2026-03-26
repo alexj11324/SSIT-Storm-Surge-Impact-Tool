@@ -1,5 +1,7 @@
 # ARC Population Impact — Project Direction & Required Pivot
 
+> **Note**: References to AWS Athena, S3, and scripts like `04_classify_lmh.py` describe the original cloud-based workflow. The current pipeline runs locally with DuckDB; shelter demand is computed in `notebooks/shelter_demand.ipynb`.
+
 > CMU Heinz MSPPM 2026 Capstone | American Red Cross
 > Date: 2026-03-10 | Based on: Client meeting transcript + Mass Care Planning Assumptions Job Tool V.6.0 + Planning Assumptions Spreadsheet (Michael 2021)
 
