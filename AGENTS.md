@@ -125,7 +125,7 @@ When asking, provide exactly what is missing and a recommended default.
 ## 9. Data Processing Policy
 
 1. Primary execution environment: local Python or Google Colab.
-2. NSI data is downloaded via `scripts/download_nsi_by_state.py` and stored as local Parquet files.
+2. NSI data is downloaded via the project's NSI download workflow and stored as local Parquet files.
 3. NHC P-Surge rasters are downloaded directly from NHC and stored in `FAST-main/rasters/`.
 4. Pipeline execution uses `scripts/duckdb_fast_pipeline.py` (DuckDB SQL) for all data transformation.
 5. Shelter demand analysis runs in Google Colab via `notebooks/shelter_demand.ipynb`.

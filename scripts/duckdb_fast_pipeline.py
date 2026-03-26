@@ -100,7 +100,7 @@ def build_fast_csv_duckdb(
     """
 
     con.execute(sql)
-    count = con.execute(f"SELECT COUNT(*) FROM read_csv_auto('{output_csv}')").fetchone()[0]
+    count = con.execute("SELECT COUNT(*) FROM read_csv_auto(?)", [output_csv]).fetchone()[0]
     con.close()
     return count
 

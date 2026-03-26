@@ -112,7 +112,7 @@ def _convert_duckdb(input_path: str, output_path: str) -> int:
     """
 
     con.execute(sql)
-    count = con.execute(f"SELECT COUNT(*) FROM read_parquet('{output_path}')").fetchone()[0]
+    count = con.execute("SELECT COUNT(*) FROM read_parquet(?)", [output_path]).fetchone()[0]
     con.close()
     return count
 

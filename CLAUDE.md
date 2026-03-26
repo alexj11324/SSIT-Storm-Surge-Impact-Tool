@@ -32,7 +32,11 @@ NHC P-Surge GeoTIFF (FAST-main/rasters/)                  |
 
 ```bash
 # Primary pipeline
-python scripts/duckdb_fast_pipeline.py --state Florida
+python scripts/duckdb_fast_pipeline.py \
+  --parquet-glob "data/nsi/state=FL/*.parquet" \
+  --raster FAST-main/rasters/IAN_2022_adv33_e10_ResultMaskRaster.tif \
+  --output outputs/fast_input.csv \
+  --flc CoastalA
 
 # SLOSH -> raster
 python scripts/slosh_to_raster.py --basin ny3mom --category 3 --tide high
