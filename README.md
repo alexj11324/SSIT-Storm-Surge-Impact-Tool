@@ -2,7 +2,7 @@
 
 CMU Heinz MSPPM 2026 Capstone Project for the American Red Cross.
 
-Property-level storm surge/tsunami impact modeling using FEMA's FAST tool, USACE National Structure Inventory (30M+ buildings), and NOAA SLOSH surge models. Estimates building damage, displaced population, and high-need populations to inform Red Cross shelter and casework planning.
+Property-level storm surge/tsunami impact modeling using FEMA's FAST tool, USACE National Structure Inventory (30M+ buildings), and NOAA storm surge models. Estimates building damage, displaced population, and high-need populations to inform Red Cross shelter and casework planning.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ NSI Parquet --> DuckDB: clean/filter/dedup/map --> FAST CSV -+
 NHC P-Surge GeoTIFF (.tif) --------------------------------+-> FAST engine -> damage predictions
 ```
 
-See `docs/shelter_demand_pipeline.md` for the full Mermaid diagram.
+See `docs/e2e_pipeline.md` for the full Mermaid diagram.
 
 ## Prerequisites
 
@@ -33,39 +33,35 @@ python scripts/duckdb_fast_pipeline.py \
   --output outputs/fast_input.csv \
   --flc CoastalA
 
-# Convert SLOSH parquet to raster
-python scripts/slosh_to_raster.py \
-  --parquet data/slosh/ny3mom.parquet \
-  --output FAST-main/rasters/ny3mom_cat3_mean.tif \
-  --category 3 --scenario mean
-
 # Validate pipeline output
-python scripts/validate_pipeline.py --predictions path/to/output.csv
+python scripts/validate_pipeline.py path/to/output.csv
 ```
 
 ## Project Structure
 
 ```
 scripts/
-  duckdb_fast_pipeline.py   # Primary pipeline: NSI Parquet -> FAST CSV -> FAST
-  nsi_raw_to_parquet.py     # Raw NSI -> processed Parquet conversion
-  h3_spatial_index.py       # H3 hex spatial pre-filtering
-  slosh_to_raster.py        # SLOSH Parquet -> GeoTIFF converter
-  validate_pipeline.py      # Post-run validation: schema + stats
-  ml_damage_model.py        # ML-based damage model (experimental)
+  duckdb_fast_pipeline.py       # Primary pipeline: NSI Parquet -> FAST CSV
+  download_nsi_by_state.py      # Download NSI from USACE API -> Parquet
+  import_nhc_by_storm.py        # Download NHC P-Surge rasters
+  nsi_raw_to_parquet.py         # Raw NSI GPKG/GeoJSON -> Parquet
+  h3_spatial_index.py           # H3 hex spatial pre-filtering
+  validate_pipeline.py          # Post-run validation: schema + stats
+  ml_damage_model.py            # ML-based damage model (experimental)
 tests/
-  conftest.py               # Shared pytest fixtures
+  conftest.py                   # Shared pytest fixtures
+  test_download_nsi_by_state.py # NSI download tests
+  test_import_nhc_by_storm.py   # NHC import tests
 notebooks/
-  shelter_demand.ipynb            # BHI shelter demand estimation (Colab)
+  shelter_demand.ipynb          # BHI shelter demand E2E pipeline (Colab)
 configs/
-  event_state_map.yaml      # Hurricane -> affected states + raster patterns
+  event_state_map.yaml          # Hurricane -> affected states + raster patterns
 docs/
-  shelter_demand_pipeline.md # Pipeline architecture with BHI model (Mermaid)
-  ddf_analysis.md           # Depth-damage function analysis
-  reflection.md             # Project insights and learnings
-  nsi_data_dictionary.md    # NSI field definitions (EN/ZH)
+  e2e_pipeline.md               # End-to-end pipeline architecture (Mermaid)
+  reflection.md                 # Project insights and learnings
+  nsi_data_dictionary.md        # NSI field definitions (EN/ZH)
 FAST-main/
-  Python_env/run_fast.py    # FAST headless engine (production)
+  Python_env/run_fast.py        # FAST headless engine (production)
 ```
 
 ## Data Sources
@@ -73,7 +69,6 @@ FAST-main/
 | Source | Description | Format |
 |--------|-------------|--------|
 | NSI | USACE National Structure Inventory 2022 | Parquet, partitioned by state |
-| SLOSH | NOAA MOM surge grids | Parquet, partitioned by basin |
 | SVI | CDC Social Vulnerability Index | Census tract level |
 
 ## Linting
@@ -91,7 +86,7 @@ Config in `pyproject.toml` (E/F/W/I rules, line-length 100, Python 3.10+).
 |------|---------|
 | `CLAUDE.md` | AI agent instructions, data contracts, critical gotchas |
 | `AGENTS.md` | Execution contract, column mapping rules, guardrails |
-| `docs/shelter_demand_pipeline.md` | Pipeline architecture with BHI shelter demand model (Mermaid) |
+| `docs/e2e_pipeline.md` | End-to-end pipeline architecture with BHI model (Mermaid) |
 | `docs/nsi_data_dictionary.md` | NSI field definitions (English + Chinese) |
 
 ## Output
@@ -138,7 +133,7 @@ Results for 9 hurricane events x 3 advisories (27 runs, ~3.9M building predictio
 
 | Column | Description |
 |--------|-------------|
-| `Depth_Grid` | Surge depth from SLOSH raster at building location (ft) |
+| `Depth_Grid` | Surge depth from P-Surge raster at building location (ft) |
 | `Depth_in_Struc` | Effective depth inside structure = Depth_Grid - FirstFloorHt (ft) |
 
 **Damage & Loss**
@@ -168,7 +163,7 @@ Results for 9 hurricane events x 3 advisories (27 runs, ~3.9M building predictio
 |--------|-------------|
 | `event` | Hurricane event slug |
 | `adv` | Advisory number |
-| `raster_name` | Source SLOSH raster filename |
+| `raster_name` | Source raster filename |
 | `run_id` | Pipeline run ID (timestamp-based) |
 | `flc` | Flood class: CoastalA / CoastalV / Riverine |
 

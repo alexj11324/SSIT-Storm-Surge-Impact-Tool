@@ -16,10 +16,10 @@ The goal: **Take a projected hurricane, figure out the flooding at every single 
 We achieve this via:
 1. **Input Data**: 
    - `NSI` (National Structure Inventory): Where is every building in the US?
-   - `SLOSH`: NOAA's hurricane surge forecasts.
+   - `NHC P-Surge`: NOAA's probabilistic hurricane surge rasters.
 2. **Intersection (`duckdb_fast_pipeline.py`)**: Merges the building data with the flood depths.
 3. **Execution (`FAST-main/Python_env/run_fast.py`)**: FEMA's FAST engine takes the flood depth per building, calculates building value (`Cost`), and spits out structural damage percentage (`BldgDmgPct`).
-4. **Delivery**: Results are uploaded as partitioned Parquet files to AWS S3, queryable via AWS Athena using SQL (e.g. `SELECT SUM(BldgLossUSD) ...`).
+4. **Shelter Demand**: Building damage is classified into damage states, aggregated to census tracts, and combined with Census population + SVI data to estimate shelter-seeking population (see `notebooks/shelter_demand.ipynb`).
 
 ## Part III: Setup, Execute, and Contribute
 
@@ -28,19 +28,23 @@ We achieve this via:
    ```bash
    pip install pyarrow rasterio pyyaml h3 duckdb geopandas
    ```
-2. **Execute your first script**
-   Convert SLOSH data to a GeoTIFF Raster map.
+2. **Download a P-Surge raster**
+   Download NHC P-Surge rasters for a storm event:
    ```bash
-   python scripts/slosh_to_raster.py --basin ny3mom --category 3 --tide high
+   # Edit storm parameters at the bottom of the script, then run:
+   python scripts/import_nhc_by_storm.py
    ```
-3. **Run an End-to-End Pipeline test**
+3. **Run the primary pipeline**
    ```bash
-   python scripts/fast_e2e_from_oracle.py --state-scope Florida --raster-name auto --config configs/fast_e2e.yaml
+   python scripts/duckdb_fast_pipeline.py \
+     --parquet-glob "data/nsi/state=FL/*.parquet" \
+     --raster FAST-main/rasters/IAN_2022_adv33_e10_ResultMaskRaster.tif \
+     --output outputs/fast_input.csv --flc CoastalA
    ```
 
 ## Appendix: Glossary of Key Terms
 
-- **SLOSH**: (Sea, Lake and Overland Surges from Hurricanes) NOAA grid algorithms.
+- **NHC P-Surge**: NOAA National Hurricane Center probabilistic surge product; pre-computed inundation GeoTIFF rasters used as flood depth input.
 - **NSI**: National Structure Inventory.
 - **FAST**: FEMA's predictive simulation tool.
 - **TIF (GeoTIFF)**: Image format containing geographic projection metadata.

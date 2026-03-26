@@ -8,7 +8,7 @@ Follow these rules by default unless the user explicitly overrides them.
 Primary production path:
 
 1. Use NSI processed data to build FAST-ready building inventory CSV.
-2. Use SLOSH processed data to produce flood depth raster (`.tif`).
+2. Use NHC P-Surge rasters as flood depth input (`.tif`).
 3. Run FAST headless (no GUI) and generate FAST output CSV artifacts.
 
 Do not introduce unrelated architecture changes unless requested.
@@ -51,7 +51,7 @@ Keep and populate these columns:
 1. `flC` (`Riverine` / `CoastalA` / `CoastalV`)
 2. `raster` (`.tif` path/name)
 
-## 4. NSI/SLOSH Source Mapping Rules
+## 4. NSI Source Mapping Rules
 
 ### 4.1 NSI -> FAST CSV (canonical mapping)
 
@@ -66,15 +66,9 @@ Keep and populate these columns:
 9. `longitude` -> `Longitude`
 10. `val_cont` -> `ContentCost` (optional)
 
-### 4.2 SLOSH -> Raster
+### 4.2 Flood Depth Raster
 
-Use SLOSH fields to build raster; FAST does not consume SLOSH parquet directly:
-
-1. Geometry: `geometry_wkt`
-2. Surge scenario value: one of `cN_mean` / `cN_high` (N=0..5)
-3. Terrain adjustment as needed: `topography`
-
-Output must be GeoTIFF (`.tif`) in feet.
+NHC P-Surge inundation rasters are downloaded via `scripts/import_nhc_by_storm.py` and stored in `FAST-main/rasters/`. Format: GeoTIFF (`.tif`) in feet.
 
 ## 5. Default Hazard Choice Policy
 
@@ -84,7 +78,7 @@ For coastal storm-surge workflows in this repo:
 2. Sensitivity/high-risk run: `CoastalV`
 3. Use `Riverine` only for inland/riverine tasks
 
-If user does not specify and the task is SLOSH-driven, use `CoastalA`.
+If user does not specify and the task is storm-surge-driven, use `CoastalA`.
 
 ## 6. Execution Behavior Rules (No Low-Value Questions)
 
@@ -120,7 +114,7 @@ When asking, provide exactly what is missing and a recommended default.
 1. Do not silently alter business assumptions.
 2. Do not switch data model without explicit request.
 3. Do not expand scope to infrastructure refactors unless user asks.
-4. Keep changes focused on NSI -> FAST CSV, SLOSH -> raster, and FAST execution.
+4. Keep changes focused on NSI -> FAST CSV, raster acquisition, and FAST execution.
 
 ## 9. Data Processing Policy
 

@@ -1,5 +1,7 @@
 # ARC Population Impact — Project Direction & Required Pivot
 
+> **Note**: References to AWS Athena, S3, and scripts like `04_classify_lmh.py` describe the original cloud-based workflow. The current pipeline runs locally with DuckDB; shelter demand is computed in `notebooks/shelter_demand.ipynb`.
+
 > CMU Heinz MSPPM 2026 Capstone | American Red Cross
 > Date: 2026-03-10 | Based on: Client meeting transcript + Mass Care Planning Assumptions Job Tool V.6.0 + Planning Assumptions Spreadsheet (Michael 2021)
 
@@ -232,7 +234,7 @@ Output CSV:
 
 ### 4.3 Colab Notebook (New Version)
 
-**Input**: NHC advisory → SLOSH surge raster → FAST building damage predictions (or pre-computed Athena results)
+**Input**: NHC advisory → NHC P-Surge raster → FAST building damage predictions (or pre-computed Athena results)
 
 **Processing**:
 1. Load building-level damage data (from Athena query or uploaded CSV)
@@ -277,7 +279,7 @@ meals_feeding_low,meals_feeding_med,meals_feeding_high
 
 2. **Refining Michael's Storm Surge Thresholds**: Michael admitted his 4/9/12 ft thresholds were "gut feeling." We can validate these against FAST damage distributions — at what surge depths do we see the damage patterns matching High/Medium/Low criteria in Figure 10?
 
-3. **Pre-event Prediction Pipeline**: The full chain from NHC advisory → SLOSH raster → FAST → county L/M/H populations can run in Colab, giving ARC a tool to generate planning numbers BEFORE landfall.
+3. **Pre-event Prediction Pipeline**: The full chain from NHC advisory → P-Surge raster → FAST → county L/M/H populations can run in Colab, giving ARC a tool to generate planning numbers BEFORE landfall.
 
 4. **Consistency**: Replace subjective "draw zones on a map" with data-driven classification of every building in the affected area.
 

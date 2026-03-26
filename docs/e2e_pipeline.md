@@ -3,62 +3,81 @@
 ```mermaid
 graph TD
     subgraph "External Data Sources"
-        NSI_API["USACE NSI API<br/>(30M+ buildings)"]
-        NHC["NHC P-Surge GeoTIFF<br/>(flood depth, feet)"]
-        CENSUS["Census ACS 5-year<br/>(county population)"]
-        SVI["CDC SVI 2022<br/>(RPL_THEMES 0–1)"]
+        NHC["NHC P-Surge GeoTIFF"]
+        NSI_API["USACE NSI API"]
+        CENSUS["Census ACS 5-year<br/>(tract-level population)"]
+        SVI["CDC SVI 2022<br/>(tract-level, RPL_THEMES 0–1)"]
         GT["Ground Truth Data.xlsx<br/>(9 hurricanes 2018–2024)"]
     end
 
-    subgraph "Stage 1: Data Ingestion"
-        INGEST["Download & Convert<br/>API → GeoJSON → Parquet"]
+    subgraph "Input"
+        EXCEL["Excel Interface<br/>Storm ID, Advisory, Year<br/>+ BHI configurable params"]
     end
 
-    subgraph "Stage 2: Building-Level Damage (FAST Engine)"
-        PREP["Spatial Filter & Column Mapping<br/>DuckDB: bbox clip, dedup by bid,<br/>NSI → FAST schema"]
-        FAST["FAST Depth-Damage Lookup<br/>raster depth at lat/lon<br/>− FirstFloorHt → DDF by occupancy"]
+    subgraph "Stage 1: Data Acquisition"
+        RASTER["Download P-Surge Raster<br/>NHC ZIP → TIF in memory<br/>+ identify affected states"]
+        NSI_DL["Download NSI per State<br/>USACE API → GeoJSON → Parquet<br/>retains bid + cbfips"]
     end
 
-    subgraph "Stage 3: S3 / Athena"
-        S3_ATHENA["arc_storm_surge.predictions_csv<br/>~3.9M rows on S3"]
+    subgraph "Stage 2: FAST Damage Engine"
+        FILTER["Spatial Filter + Column Mapping<br/>bbox clip, dedup by bid,<br/>NSI → FAST schema"]
+        FAST["FAST Depth-Damage Lookup<br/>raster depth − FirstFloorHt<br/>→ DDF by occupancy"]
     end
 
-    subgraph "Stage 4: Intensity Zone Classification"
-        CLASSIFY["Dedup across advisories<br/>(MAX damage per building)<br/>─────────────────────<br/>Surge depth primary:<br/>  >12 ft → HIGH | ≥9 → MED | ≥4 → LOW<br/>Damage % fallback:<br/>  >35% → HIGH | >15% → MED | >0% → LOW<br/>─────────────────────<br/>Spatial join → county FIPS<br/>Aggregate per county × zone"]
+    subgraph "Stage 3: Damage Classification (Census Tract)"
+        GEOID["Derive Tract GEOID<br/>JOIN predictions ↔ NSI by FltyId=bid<br/>tract = cbfips[:11]"]
+        DMGSTATE["Classify Damage State<br/>BldgDmgPct thresholds:<br/>  0–15% → Slight<br/>  15–40% → Moderate<br/>  40–60% → Extensive<br/>  60–100% → Complete"]
+        TRACTAGG["Aggregate to Tract<br/>count buildings per damage state<br/>compute max_intensity,<br/>% destroyed, % major damage"]
+        SEVERITY["Classify Tract Severity<br/>≥35% destroyed → HIGH<br/>11–34% → MEDIUM<br/><11% → LOW"]
     end
 
-    subgraph "Stage 5: Planning Estimates"
-        PLAN["Census population join<br/>+ SVI bump (1 + 0.20 × svi_score) on HIGH<br/>─────────────────────<br/>ARC conversion rates:<br/>  Shelter: H=5% M=3% L=1%<br/>  Feeding: H=12% M=7% L=3%"]
+    subgraph "Stage 4: Shelter Demand"
+        BHI["Compute BHI Factor (low/high)<br/>─────────────────────<br/>BHI = Σ frac_d × [<br/>  U[d][FU] × S[risk][FU] +<br/>  U[d][PU] × S[risk][PU] +<br/>  U[d][NU] × 1.0 ]"]
+        SVIJOIN["Census Population + SVI Join<br/>SVI mapping:<br/>  0.0–0.4 → 0%<br/>  0.4–0.8 → 2.5%<br/>  0.8–1.0 → 5%"]
+        SHELTER["Shelter-Seeking Estimation<br/>─────────────────────<br/>shelter = population<br/>  × BHI_factor<br/>  × SVI_Value_Mapped"]
     end
 
-    subgraph "Stage 6: Validation"
+    %% Data flow
+    EXCEL -->|"params JSON"| RASTER
+    NHC --> RASTER
+    RASTER -->|"EVENT_advN_e10_ResultMaskRaster.tif"| FILTER
+    RASTER -->|"affected_states[]"| NSI_DL
+    NSI_API --> NSI_DL
+    NSI_DL -->|"nsi_STATE.parquet<br/>(bid, cbfips, lat, lon, ...)"| FILTER
+    FILTER -->|"fast_input.csv"| FAST
+    NHC -.->|raster| FAST
+    FAST -->|"predictions.csv<br/>(BldgDmgPct, Depth_Grid)"| GEOID
+    NSI_DL -.->|"cbfips via bid JOIN"| GEOID
+    GEOID --> DMGSTATE
+    DMGSTATE --> TRACTAGG
+    TRACTAGG --> SEVERITY
+    SEVERITY --> BHI
+    BHI --> SVIJOIN
+    CENSUS --> SVIJOIN
+    SVI --> SVIJOIN
+    SVIJOIN --> SHELTER
+    SHELTER -->|"shelter_demand_output.csv<br/>+ .xlsx"| VALIDATE
+
+    subgraph "Stage 5: Validation"
         VALIDATE["Compare vs Ground Truth<br/>RMSE, MAE, R²<br/>threshold sensitivity"]
     end
 
-    %% Data flow with output artifacts on edges
-    NSI_API --> INGEST
-    INGEST -->|"nsi/state=XX/part-00000.snappy.parquet"| PREP
-    NHC -->|"EVENT_YEAR_advN_e10_ResultMaskRaster.tif"| PREP
-    NHC -.->|raster| FAST
-    PREP -->|"fast_input.csv<br/>(FltyId, Occ, Cost, Lat, Lon, ...)"| FAST
-    FAST -->|"predictions.csv<br/>(BldgDmgPct, Depth_Grid, BldgLossUSD)"| S3_ATHENA
-
-    S3_ATHENA --> CLASSIFY
-    CLASSIFY -->|"county_lmh_long.csv<br/>(event × county × zone)"| PLAN
-    CLASSIFY -->|"county_lmh_features.csv<br/>(event × county, wide)"| PLAN
-    CENSUS --> PLAN
-    SVI --> PLAN
-    PLAN -->|"planning_assumptions_output.csv<br/>arc_planning_template_lmh.xlsx"| VALIDATE
+    VALIDATE -->|"lmh_validation_report.md"| DONE["Deliverable<br/>→ paste back to Excel"]
     GT --> VALIDATE
-    VALIDATE -->|"lmh_validation_report.md"| DONE["Deliverable"]
 
     %% Styling
-    style PREP fill:#2d6a4f,color:#fff
+    style EXCEL fill:#1d3557,color:#fff
+    style RASTER fill:#2d6a4f,color:#fff
+    style NSI_DL fill:#2d6a4f,color:#fff
+    style FILTER fill:#2d6a4f,color:#fff
     style FAST fill:#d62828,color:#fff
-    style S3_ATHENA fill:#ff9f1c,color:#000
-    style CLASSIFY fill:#457b9d,color:#fff
-    style PLAN fill:#457b9d,color:#fff
-    style VALIDATE fill:#457b9d,color:#fff
+    style GEOID fill:#457b9d,color:#fff
+    style DMGSTATE fill:#457b9d,color:#fff
+    style TRACTAGG fill:#457b9d,color:#fff
+    style SEVERITY fill:#457b9d,color:#fff
+    style BHI fill:#e9c46a,color:#000
+    style SVIJOIN fill:#e9c46a,color:#000
+    style SHELTER fill:#e9c46a,color:#000
     style SVI fill:#6a4c93,color:#fff
     style DONE fill:#e76f51,color:#fff
 ```
@@ -67,15 +86,28 @@ graph TD
 
 | Color | Meaning |
 |-------|---------|
-| Green | Data preparation (DuckDB) |
+| Dark blue | User input (Excel) |
+| Green | Data acquisition & preparation |
 | Red | FAST damage engine |
-| Orange | AWS storage (S3/Athena) |
-| Blue | Population impact pipeline |
+| Blue | Damage classification & tract aggregation |
+| Gold | BHI computation & shelter demand |
 | Purple | SVI data source |
 | Coral | Final deliverable |
 
-## Notes
+## Notebook Cell Mapping
 
-- **Edges show output file names** — each arrow is labeled with the artifact produced by that step.
-- **Stage 2 runs locally**; Stage 3 onwards requires AWS credentials (`boto3`) for Athena queries.
-- If prediction CSVs are available locally, the Athena dependency can be replaced with DuckDB.
+| Cell | Stage | Node |
+|------|-------|------|
+| 2 | Input | Excel params JSON |
+| 3 | 1 | Download P-Surge Raster |
+| 4 | 1 | Download NSI per State |
+| 5 | 2 | Spatial Filter + Column Mapping |
+| 6 | 2 | FAST Engine |
+| 7 | 3 | Derive Tract GEOID |
+| 8 | 3 | Classify Damage State + Aggregate |
+| 9 | 3 | Classify Tract Severity |
+| 10 | 4 | Compute BHI Factor |
+| 11 | 4 | Census + SVI Join |
+| 12 | 4 | Shelter-Seeking Estimation |
+| 13 | 5 | Validate vs Ground Truth |
+| 14 | — | Export |

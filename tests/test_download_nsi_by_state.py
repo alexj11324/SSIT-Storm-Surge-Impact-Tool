@@ -13,10 +13,7 @@ from scripts import nsi_raw_to_parquet as raw_to_parquet
 
 
 def _write_schema_only_parquet(path: Path, rows: int = 1) -> None:
-    arrays = [
-        pa.array([None] * rows, type=field.type)
-        for field in raw_to_parquet.TARGET_SCHEMA
-    ]
+    arrays = [pa.array([None] * rows, type=field.type) for field in raw_to_parquet.TARGET_SCHEMA]
     table = pa.Table.from_arrays(arrays, schema=raw_to_parquet.TARGET_SCHEMA)
     pq.write_table(table, path, compression="snappy")
 
@@ -58,7 +55,9 @@ def test_write_feature_collection_rejects_empty_stream() -> None:
         downloader.write_feature_collection([], io.StringIO())
 
 
-def test_download_state_inventory_uses_expected_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_download_state_inventory_uses_expected_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def fake_download_state_geojson(*, state, destination, timeout, retries, overwrite):
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(
@@ -94,7 +93,9 @@ def test_download_state_inventory_uses_expected_paths(tmp_path: Path, monkeypatc
     assert Path(result["processed_parquet"]).exists()
 
 
-def test_download_state_inventory_refuses_existing_outputs_without_overwrite(tmp_path: Path) -> None:
+def test_download_state_inventory_refuses_existing_outputs_without_overwrite(
+    tmp_path: Path,
+) -> None:
     state = downloader.normalize_state_identifier("Delaware")
     raw_path = tmp_path / "raw" / "nsi_2022_10_Delaware.geojson"
     raw_path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,7 +147,9 @@ def test_write_manifest_persists_json_and_cleans_temp_file(tmp_path: Path) -> No
     assert content["states"] == entries
 
 
-def test_convert_raw_nsi_to_parquet_reuses_public_entrypoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_convert_raw_nsi_to_parquet_reuses_public_entrypoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     called = {"geopandas": False}
 
     def fake_geopandas(input_path: str, output_path: str) -> int:

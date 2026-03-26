@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CMU Heinz MSPPM 2026 Capstone for American Red Cross. Property-level storm surge/tsunami impact modeling using FEMA's FAST (Flood Assessment Structure Tool) with NSI building inventory (30M+ structures) and SLOSH surge rasters. Goal: estimate building damage, displaced population, and high-need populations for Red Cross shelter/casework planning.
+CMU Heinz MSPPM 2026 Capstone for American Red Cross. Property-level storm surge/tsunami impact modeling using FEMA's FAST (Flood Assessment Structure Tool) with NSI building inventory (30M+ structures) and NHC P-Surge rasters. Goal: estimate building damage, displaced population, and high-need populations for Red Cross shelter/casework planning.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ NHC P-Surge GeoTIFF (FAST-main/rasters/)                  |
 - Primary pipeline: `scripts/duckdb_fast_pipeline.py`
 - FAST headless engine: `FAST-main/Python_env/run_fast.py`
 - Agent execution rules: @AGENTS.md
-- Pipeline architecture: @docs/shelter_demand_pipeline.md
+- Pipeline architecture: @docs/e2e_pipeline.md
 
 ## Critical Gotchas
 
@@ -38,14 +38,11 @@ python scripts/duckdb_fast_pipeline.py \
   --output outputs/fast_input.csv \
   --flc CoastalA
 
-# SLOSH -> raster
-python scripts/slosh_to_raster.py --basin ny3mom --category 3 --tide high
-
 # H3 spatial index
-python scripts/h3_spatial_index.py --raster path/to/raster.tif --resolution 7
+python scripts/h3_spatial_index.py --raster path/to/raster.tif --parquet data/nsi/*.parquet --resolution 7
 
 # Validate output
-python scripts/validate_pipeline.py --predictions path/to/output.csv
+python scripts/validate_pipeline.py path/to/output.csv
 ```
 
 ## Data Contracts
@@ -62,12 +59,13 @@ python scripts/validate_pipeline.py --predictions path/to/output.csv
 | `found_type` | `FoundationType` | Numeric: Pier=2, Basement=4, Crawl=5, Slab=7 |
 | `found_ht` | `FirstFloorHt` | Feet above grade |
 | `latitude`/`longitude` | `Latitude`/`Longitude` | WGS84 |
+| `val_cont` | `ContentCost` | Optional, defaults to 0 via COALESCE |
 
 Full contract with optional columns and runtime params: @AGENTS.md
 
 ### Flood Depth Raster
 
-Pipeline uses NHC P-Surge GeoTIFF rasters directly (inundation depth in feet). See `docs/shelter_demand_pipeline.md` for the full data flow.
+Pipeline uses NHC P-Surge GeoTIFF rasters directly (inundation depth in feet). See `docs/e2e_pipeline.md` for the full data flow.
 
 ## FAST Runtime Parameters
 

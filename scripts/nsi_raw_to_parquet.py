@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import glob
 import sys
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -171,9 +172,7 @@ def resolve_input_path(input_pattern: str) -> str:
     return input_path
 
 
-def convert_raw_nsi_to_parquet(
-    input_path: str, output_path: str, engine: str = "duckdb"
-) -> int:
+def convert_raw_nsi_to_parquet(input_path: str, output_path: str, engine: str = "duckdb") -> int:
     """Convert a raw NSI GPKG/GeoJSON file to processed parquet."""
     if engine not in {"duckdb", "geopandas"}:
         raise ValueError(f"unsupported engine: {engine}")
