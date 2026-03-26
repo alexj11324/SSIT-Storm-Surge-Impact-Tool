@@ -1,0 +1,32 @@
+{
+  "script": "04_classify_lmh.py",
+  "county_table": "arc_analysis.us_county_boundaries",
+  "n_long_rows": 836,
+  "n_wide_rows": 383,
+  "n_events": 9,
+  "events": [
+    "BERYL_2024",
+    "DEBBY_2024",
+    "FLORENCE_2018",
+    "HELENE_2024",
+    "IAN_2022",
+    "IDALIA_2023",
+    "IDA_2021",
+    "MICHAEL_2018",
+    "MILTON_2024"
+  ],
+  "zones": [
+    "HIGH",
+    "LOW",
+    "MEDIUM"
+  ],
+  "thresholds": {
+    "surge_low_ft": 4,
+    "surge_medium_ft": 9,
+    "surge_high_ft": 12,
+    "damage_low_pct": 0,
+    "damage_medium_pct": 15,
+    "damage_high_pct": 35
+  },
+  "created_at": "2026-03-10T22:18:54.436290+00:00"
+}

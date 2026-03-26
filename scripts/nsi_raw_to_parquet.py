@@ -159,6 +159,38 @@ def validate_schema(output_path: str) -> bool:
     return True
 
 
+def resolve_input_path(input_pattern: str) -> str:
+    """Resolve an input glob to a single filesystem path."""
+    inputs = sorted(glob.glob(input_pattern))
+    if not inputs:
+        raise FileNotFoundError(f"no files match '{input_pattern}'")
+
+    input_path = inputs[0]
+    if len(inputs) > 1:
+        print(f"WARNING: multiple files matched, using first: {input_path}")
+    return input_path
+
+
+def convert_raw_nsi_to_parquet(
+    input_path: str, output_path: str, engine: str = "duckdb"
+) -> int:
+    """Convert a raw NSI GPKG/GeoJSON file to processed parquet."""
+    if engine not in {"duckdb", "geopandas"}:
+        raise ValueError(f"unsupported engine: {engine}")
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    convert = _convert_duckdb if engine == "duckdb" else _convert_geopandas
+    try:
+        return convert(input_path, str(output))
+    except Exception as exc:
+        if engine != "duckdb":
+            raise
+        print(f"DuckDB failed ({exc}), falling back to geopandas...")
+        return _convert_geopandas(input_path, str(output))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Convert raw NSI GPKG/GeoJSON to processed Parquet"
@@ -173,27 +205,15 @@ def main():
     )
     args = parser.parse_args()
 
-    # Resolve glob
-    inputs = sorted(glob.glob(args.input))
-    if not inputs:
-        print(f"ERROR: no files match '{args.input}'")
+    try:
+        input_path = resolve_input_path(args.input)
+    except FileNotFoundError as exc:
+        print(f"ERROR: {exc}")
         sys.exit(1)
-
-    input_path = inputs[0]
-    if len(inputs) > 1:
-        print(f"WARNING: multiple files matched, using first: {input_path}")
 
     print(f"Converting {input_path} → {args.output} (engine={args.engine})")
 
-    convert = _convert_duckdb if args.engine == "duckdb" else _convert_geopandas
-    try:
-        count = convert(input_path, args.output)
-    except Exception as e:
-        if args.engine == "duckdb":
-            print(f"DuckDB failed ({e}), falling back to geopandas...")
-            count = _convert_geopandas(input_path, args.output)
-        else:
-            raise
+    count = convert_raw_nsi_to_parquet(input_path, args.output, engine=args.engine)
 
     print(f"Wrote {count:,} rows to {args.output}")
     validate_schema(args.output)

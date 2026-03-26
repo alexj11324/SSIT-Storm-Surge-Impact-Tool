@@ -1,0 +1,14 @@
+name: Translate README
+on:
+  push:
+    branches: [main, master]
+    paths: ['README.md']
+  workflow_dispatch:
+
+jobs:
+  translate:
+    uses: alexj11324/claude-skills/.github/workflows/translate-readme.yml@main
+    with:
+      target_langs: 'zh,en'
+    secrets:
+      GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}

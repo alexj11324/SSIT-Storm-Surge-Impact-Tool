@@ -1,0 +1,83 @@
+name: Download NSI by State
+
+on:
+  workflow_dispatch:
+    inputs:
+      states:
+        description: "States to download (comma-separated: FL,TX,NC or Florida,Texas)"
+        required: true
+        type: string
+      engine:
+        description: "Parquet conversion engine"
+        required: false
+        default: "geopandas"
+        type: choice
+        options:
+          - geopandas
+          - duckdb
+      timeout:
+        description: "Per-request timeout in seconds (increase for large states)"
+        required: false
+        default: "600"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          pip install pyarrow geopandas
+          if [ "$ENGINE" = "duckdb" ]; then
+            pip install duckdb
+          fi
+
+      - name: Download NSI data
+        env:
+          INPUT_STATES: ${{ inputs.states }}
+          INPUT_ENGINE: ${{ inputs.engine }}
+          INPUT_TIMEOUT: ${{ inputs.timeout }}
+        run: |
+          # Build --state flags from comma-separated input
+          IFS=',' read -ra STATES <<< "$INPUT_STATES"
+          CMD=(python scripts/download_nsi_by_state.py)
+          for s in "${STATES[@]}"; do
+            trimmed=$(echo "$s" | xargs)
+            CMD+=(--state "$trimmed")
+          done
+          CMD+=(--engine "$INPUT_ENGINE" --timeout "$INPUT_TIMEOUT" --output-dir output)
+          "${CMD[@]}"
+
+      - name: Show manifest
+        run: cat output/manifest.json
+
+      - name: Upload processed parquet
+        uses: actions/upload-artifact@v4
+        env:
+          INPUT_STATES: ${{ inputs.states }}
+        with:
+          name: nsi-parquet-${{ github.run_id }}
+          path: output/processed/
+          retention-days: 90
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: nsi-manifest-${{ github.run_id }}
+          path: output/manifest.json
+          retention-days: 90

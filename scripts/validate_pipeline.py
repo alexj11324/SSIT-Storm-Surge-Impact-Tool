@@ -79,8 +79,7 @@ def run_checks(summary: dict) -> list[str]:
 
     if summary["zero_loss_pct"] > 90:
         issues.append(
-            f"WARN: {summary['zero_loss_pct']}% zero-loss rows — "
-            "likely spatial mismatch (buildings outside raster)"
+            f"WARN: {summary['zero_loss_pct']}% zero-loss rows — likely spatial mismatch (buildings outside raster)"
         )
 
     if len(summary["rows_by_state"]) == 0:
