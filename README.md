@@ -44,14 +44,10 @@ scripts/
   duckdb_fast_pipeline.py       # Primary pipeline: NSI Parquet -> FAST CSV
   download_nsi_by_state.py      # Download NSI from USACE API -> Parquet
   import_nhc_by_storm.py        # Download NHC P-Surge rasters
-  04_classify_lmh.py            # Classify buildings into L/M/H intensity zones
-  05_format_for_spreadsheet.py  # Format output for ARC Excel template
-  06_validate_lmh.py            # Validate L/M/H classification results
   nsi_raw_to_parquet.py         # Raw NSI GPKG/GeoJSON -> Parquet
   h3_spatial_index.py           # H3 hex spatial pre-filtering
   validate_pipeline.py          # Post-run validation: schema + stats
   ml_damage_model.py            # ML-based damage model (experimental)
-  match_county_coverage_cloud.py # County coverage matching
 tests/
   conftest.py                   # Shared pytest fixtures
   test_download_nsi_by_state.py # NSI download tests

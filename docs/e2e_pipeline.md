@@ -69,7 +69,7 @@ graph TD
 |-------|---------|
 | Green | Data preparation (DuckDB) |
 | Red | FAST damage engine |
-| Orange | AWS storage (S3/Athena) |
+| Orange | Data storage |
 | Blue | Population impact pipeline |
 | Purple | SVI data source |
 | Coral | Final deliverable |
@@ -77,5 +77,5 @@ graph TD
 ## Notes
 
 - **Edges show output file names** — each arrow is labeled with the artifact produced by that step.
-- **Stage 2 runs locally**; Stage 3 onwards requires AWS credentials (`boto3`) for Athena queries.
-- If prediction CSVs are available locally, the Athena dependency can be replaced with DuckDB.
+- **Stages 1-2 run locally**; Stages 4-6 run in Google Colab (`notebooks/shelter_demand.ipynb`).
+- All data processing uses local Parquet + DuckDB. No cloud dependencies required.

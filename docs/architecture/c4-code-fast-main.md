@@ -1,3 +1,5 @@
+> **Historical**: This document reflects the pre-Colab-migration cloud architecture. Current pipeline runs locally with DuckDB + Google Colab.
+
 # C4 Code-Level Documentation: FAST-main/
 
 ## 1. Overview Section

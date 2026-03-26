@@ -1,3 +1,5 @@
+> **Historical**: This document reflects the pre-Colab-migration cloud architecture. Current pipeline runs locally with DuckDB + Google Colab.
+
 # C4 Component-Level Master Index
 
 ## 1. System Components Section
