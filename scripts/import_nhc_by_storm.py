@@ -3,15 +3,24 @@
 import io
 import re
 import zipfile
+from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import urljoin
 
 import geopandas as gpd
 import requests
-from pygris import states
 from rasterio.io import MemoryFile
 from requests.adapters import HTTPAdapter
 from shapely.geometry import box
 from urllib3.util.retry import Retry
+
+try:
+    from pygris import states as states
+except Exception:
+    states = None
+
+NHC_INUNDATION_INDEX_URL = "https://www.nhc.noaa.gov/gis/archive_inundation_results.php"
+NHC_FORECASTS_BASE_URL = "https://www.nhc.noaa.gov/gis/inundation/forecasts/"
 
 
 def _normalize_storm_id(storm_id: str, year: int) -> str:
@@ -47,16 +56,75 @@ def _build_session(retries: int = 3, backoff: float = 0.5) -> requests.Session:
     return session
 
 
-def _build_nhc_candidate_urls(normalized_storm_id: str, adv: int, year: int) -> List[str]:
-    """Return likely NHC tidalmask archive URLs in newest-to-oldest naming order."""
-    adv_padded = f"{int(adv):03d}"
-    legacy_storm_id = f"{normalized_storm_id[:4]}{str(year)[-2:]}"
-    return [
-        f"https://www.nhc.noaa.gov/gis/inundation/forecasts/{normalized_storm_id}_{adv_padded}_tidalmask.zip",
-        f"https://www.nhc.noaa.gov/gis/inundation/forecasts/{legacy_storm_id}_{int(adv)}_tidalmask.zip",
-        f"https://www.nhc.noaa.gov/gis/inundation/forecasts/{normalized_storm_id}_tidalmask_latest.zip",
-        f"https://www.nhc.noaa.gov/gis/inundation/forecasts/{legacy_storm_id}_tidalmask_latest.zip",
+def _storm_id_variants(normalized_storm_id: str, year: int) -> List[str]:
+    compact_storm_id = f"{normalized_storm_id[:4]}{str(year)[-2:]}"
+    variants = [compact_storm_id, normalized_storm_id]
+    return list(dict.fromkeys(variants))
+
+
+def _advisory_variants(adv: int) -> List[str]:
+    return list(dict.fromkeys([str(int(adv)), f"{int(adv):03d}"]))
+
+
+def _build_tif_filename(storm_name: str, year: int, adv: int) -> str:
+    return f"{storm_name.upper()}_{year}_adv{int(adv)}_e10_ResultMaskRaster.tif"
+
+
+def _get_states(cb: bool, cache: bool, year: int):
+    get_states = states
+    if get_states is None:
+        from pygris import states as get_states
+    return get_states(cb=cb, cache=cache, year=year)
+
+
+def _resolve_nhc_archive_urls(
+    normalized_storm_id: str,
+    adv: int,
+    year: int,
+    *,
+    session: requests.Session,
+    timeout: int,
+) -> List[str]:
+    """Discover the real tidalmask URL(s) from the NHC archive index page."""
+    response = session.get(NHC_INUNDATION_INDEX_URL, timeout=timeout)
+    response.raise_for_status()
+
+    hrefs = re.findall(r'href="([^"]+_tidalmask\.zip)"', response.text, flags=re.IGNORECASE)
+    available_urls = {
+        Path(href).name: urljoin(NHC_INUNDATION_INDEX_URL, href)
+        for href in hrefs
+    }
+
+    exact_names = [
+        f"{storm_id}_{adv_value}_tidalmask.zip"
+        for storm_id in _storm_id_variants(normalized_storm_id, year)
+        for adv_value in _advisory_variants(adv)
     ]
+    latest_names = [
+        f"{storm_id}_tidalmask_latest.zip"
+        for storm_id in _storm_id_variants(normalized_storm_id, year)
+    ]
+
+    resolved = [available_urls[name] for name in exact_names if name in available_urls]
+    if resolved:
+        return list(dict.fromkeys(resolved))
+
+    resolved = [available_urls[name] for name in latest_names if name in available_urls]
+    return list(dict.fromkeys(resolved))
+
+
+def _build_nhc_candidate_urls(normalized_storm_id: str, adv: int, year: int) -> List[str]:
+    """Return direct forecast URLs as a fallback when archive discovery fails."""
+    exact_names = [
+        f"{storm_id}_{adv_value}_tidalmask.zip"
+        for storm_id in _storm_id_variants(normalized_storm_id, year)
+        for adv_value in _advisory_variants(adv)
+    ]
+    latest_names = [
+        f"{storm_id}_tidalmask_latest.zip"
+        for storm_id in _storm_id_variants(normalized_storm_id, year)
+    ]
+    return [urljoin(NHC_FORECASTS_BASE_URL, name) for name in list(dict.fromkeys(exact_names + latest_names))]
 
 
 def import_surge_data(
@@ -86,11 +154,26 @@ def import_surge_data(
     """
     normalized_storm_id = _normalize_storm_id(storm_id, year)
     storm_name = storm_name.upper()
-    candidate_urls = _build_nhc_candidate_urls(normalized_storm_id, adv, year)
-    tif_filename_in_zip = f"{storm_name}_{year}_adv{int(adv)}_e10_ResultMaskRaster.tif"
+    tif_filename_in_zip = _build_tif_filename(storm_name, year, adv)
     download_session = session or _build_session(retries=retries)
+    candidate_urls: List[str] = []
+    try:
+        candidate_urls.extend(
+            _resolve_nhc_archive_urls(
+                normalized_storm_id,
+                adv,
+                year,
+                session=download_session,
+                timeout=timeout,
+            )
+        )
+    except requests.RequestException:
+        pass
+    candidate_urls.extend(_build_nhc_candidate_urls(normalized_storm_id, adv, year))
+    candidate_urls = list(dict.fromkeys(candidate_urls))
 
     response = None
+    selected_url = None
     last_error = None
     for url in candidate_urls:
         print(f"Downloading {url} ...")
@@ -101,6 +184,7 @@ def import_surge_data(
             last_error = exc
             continue
         response = candidate_response
+        selected_url = url
         break
 
     if response is None:
@@ -126,7 +210,7 @@ def import_surge_data(
     )
     surge_extent_gdf = gpd.GeoDataFrame({"id": 1, "geometry": [surge_polygon]}, crs=surge_data.crs)
 
-    us_states = states(cb=True, cache=True, year=year)
+    us_states = _get_states(cb=True, cache=True, year=year)
     us_states = us_states.to_crs(surge_data.crs)
 
     overlapping_states = gpd.sjoin(us_states, surge_extent_gdf, how="inner", predicate="intersects")
@@ -137,7 +221,42 @@ def import_surge_data(
     else:
         print("States not found")
 
-    return {"data": surge_data, "states": state_names}
+    return {
+        "data": surge_data,
+        "states": state_names,
+        "tif_bytes": tif_bytes,
+        "tif_name": tif_filename_in_zip,
+        "archive_url": selected_url,
+    }
+
+
+def download_surge_raster(
+    storm_id: str,
+    storm_name: str,
+    adv: int,
+    year: int,
+    *,
+    output_dir: str | Path,
+    timeout: int = 30,
+    retries: int = 3,
+    session: Optional[requests.Session] = None,
+) -> tuple[str, List[str]]:
+    """Download the NHC surge raster, save it to disk, and return path + overlapping states."""
+    result = import_surge_data(
+        storm_id=storm_id,
+        storm_name=storm_name,
+        adv=adv,
+        year=year,
+        timeout=timeout,
+        retries=retries,
+        session=session,
+    )
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    raster_path = output_dir / result["tif_name"]
+    raster_path.write_bytes(result["tif_bytes"])
+    result["data"].close()
+    return str(raster_path), result["states"]
 
 
 if __name__ == "__main__":
