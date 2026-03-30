@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 import warnings
+from http.client import IncompleteRead
 from pathlib import Path
 from unittest import mock
 from urllib import request as urllib_request
@@ -60,6 +61,26 @@ def _load_nsi_helpers():
 
 
 class ShelterNsiDownloadTest(unittest.TestCase):
+    def test_stream_retries_when_urlopen_raises_incomplete_read(self):
+        namespace = _load_nsi_helpers()
+        attempts = []
+        responses = [
+            io.BytesIO((_feature_line("retry-a") + _feature_line("retry-b")).encode("utf-8")),
+        ]
+
+        def fake_urlopen(_request, timeout=0):
+            attempts.append(timeout)
+            if len(attempts) == 1:
+                raise IncompleteRead(b"", 1024)
+            return responses[0]
+
+        with mock.patch.object(namespace["urllib_request"], "urlopen", side_effect=fake_urlopen):
+            with mock.patch.object(namespace["time"], "sleep"):
+                rows = namespace["_stream_nsi_features"]("https://example.test/nsi", timeout=1, retries=2)
+
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual([row["bid"] for row in rows], ["retry-a", "retry-b"])
+
     def test_stream_retries_when_a_feature_line_is_malformed(self):
         namespace = _load_nsi_helpers()
         attempts = []
