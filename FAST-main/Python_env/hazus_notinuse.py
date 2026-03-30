@@ -71,14 +71,12 @@
 # UKS - all logging statements added
 import logging
 import os, csv, sys, time, math, datetime, subprocess, numpy as np, utm
-from osgeo import gdal, osr, gdal_array
+import rasterio
 
 try:
     import pyarrow.parquet as pq
 except Exception:
     pq = None
-
-gdal.SetCacheMax(2**30 * 5)
 
 
 logger = logging.getLogger("FAST")
@@ -582,31 +580,23 @@ def flood_damage(UDFOrig, LUT_Dir, ResultsDir, DepthGrids, QC_Warning, fmap):
             file_out = open(outputDir, "w")
 
             print(dgp)
-            raster = gdal.Open(dgp)
+            _raster_src = rasterio.open(dgp)
 
-            # os.sys('gdalwarp '+dgp+' '+' C:/Users/Owner/Desktop/work.tif -t_srs "+proj=longlat +ellps=WGS84"')
+            noData = _raster_src.nodata
+            cols = _raster_src.width
+            rows = _raster_src.height
+            _t = _raster_src.transform
+            xOrigin = _t.c
+            yOrigin = _t.f
+            pixelWidth = _t.a
+            pixelHeight = -_t.e
+            data = _raster_src.read(1)
+            print(data)
 
-            gdal.UseExceptions()
-
-            print(1)
-            band = raster.GetRasterBand(1)
-            print(2)
-            noData = band.GetNoDataValue()
-            cols = raster.RasterXSize
-            rows = raster.RasterYSize
-            transform = raster.GetGeoTransform()
-            xOrigin = transform[0]
-            yOrigin = transform[3]
-            pixelWidth = transform[1]
-            pixelHeight = -transform[5]
-            print("before")
-            try:
-                data = band.ReadAsArray(0, 0, cols, rows)  # gdal_array.LoadFile(dgp)
-                print(data)
-            except:
-                print("here")
-
-            IsUTM = True if osr.SpatialReference(wkt=raster.GetProjection()).GetAttrValue("UNIT") == "metre" else False
+            IsUTM = (
+                _raster_src.crs is not None and _raster_src.crs.is_projected and _raster_src.crs.linear_units == "metre"
+            )
+            _raster_src.close()
             print("Is it UTM? ", IsUTM)
 
             """
