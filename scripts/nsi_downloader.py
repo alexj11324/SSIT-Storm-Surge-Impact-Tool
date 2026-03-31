@@ -1,4 +1,4 @@
-"""USACE NSI API client: stream GeoJSON features, optional Parquet cache, tqdm progress."""
+"""NSI download: USACE API streaming or HuggingFace pre-processed Parquet."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ except ImportError:  # pragma: no cover
 
 
 class NSIDownloader:
-    """USACE NSI API client: stream GeoJSON features, optional Parquet cache, tqdm progress."""
+    """NSI download client supporting USACE API and HuggingFace backends."""
 
     API_BASE = _API_BASE
     LARGE_STATE_FIPS = frozenset({"06", "12", "48"})  # CA, FL, TX — too large for single API call
@@ -269,3 +269,74 @@ class NSIDownloader:
             raise RuntimeError("No NSI data downloaded. Cannot proceed.")
 
         return pd.concat(nsi_dfs, ignore_index=True)
+
+    def download_states_hf(
+        self,
+        state_names: list,
+        repo_id: str = "Alexq847182/NSI_Parquet",
+        token: str | None = None,
+    ) -> pd.DataFrame:
+        """Download NSI from a HuggingFace dataset repo, filtering per-file to affected states.
+
+        Each parquet file is filtered to the requested states immediately after reading,
+        keeping peak memory low.
+        """
+        from huggingface_hub import HfApi, hf_hub_download
+
+        keep_cols = self.KEEP_COLS + ["longitude", "latitude"]
+        affected_fips = {self.STATE_FIPS[s] for s in state_names if s in self.STATE_FIPS}
+        if not affected_fips:
+            raise ValueError(f"No valid state FIPS found for: {state_names}")
+
+        api = HfApi()
+        repo_files = api.list_repo_files(repo_id, repo_type="dataset", token=token)
+        parquet_files = [f for f in repo_files if f.endswith(".parquet")]
+        if not parquet_files:
+            raise FileNotFoundError(f"No parquet files found in HF dataset {repo_id}")
+        print(f"Found {len(parquet_files)} parquet file(s) in {repo_id}")
+
+        hf_cache_dir = self.work_dir / "hf_nsi_cache"
+        hf_cache_dir.mkdir(parents=True, exist_ok=True)
+
+        nsi_dfs: list[pd.DataFrame] = []
+        t0 = time.time()
+        total_bytes = 0
+
+        with tqdm(total=len(parquet_files), desc="Downloading NSI from HuggingFace", unit="file") as pbar:
+            for pf in parquet_files:
+                local_path = hf_hub_download(
+                    repo_id=repo_id,
+                    filename=pf,
+                    repo_type="dataset",
+                    token=token,
+                    cache_dir=str(hf_cache_dir),
+                )
+                file_bytes = Path(local_path).stat().st_size
+                total_bytes += file_bytes
+
+                df_part = pd.read_parquet(local_path)
+                available_cols = [c for c in keep_cols if c in df_part.columns]
+                df_part = df_part[available_cols]
+
+                # Filter to affected states immediately to reduce memory
+                if "cbfips" in df_part.columns:
+                    df_part = df_part[
+                        df_part["cbfips"].astype(str).str[:2].isin(affected_fips)
+                    ]
+
+                if not df_part.empty:
+                    nsi_dfs.append(df_part)
+
+                elapsed = max(time.time() - t0, 1e-9)
+                mb_s = total_bytes / elapsed / 1024 / 1024
+                pbar.set_postfix_str(f"{mb_s:.2f} MB/s")
+                pbar.update(1)
+
+        if not nsi_dfs:
+            raise RuntimeError(
+                f"No NSI buildings found for states {state_names} in HF dataset {repo_id}"
+            )
+
+        result = pd.concat(nsi_dfs, ignore_index=True)
+        print(f"Filtered to {len(affected_fips)} state(s): {affected_fips} — {len(result):,} buildings")
+        return result
