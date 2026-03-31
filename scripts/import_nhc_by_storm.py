@@ -191,11 +191,17 @@ def import_surge_data(
     last_error = None
     for url in candidate_urls:
         print(f"Downloading {url} ...")
-        candidate_response = download_session.get(url, stream=True, timeout=timeout)
+        candidate_response = None
         try:
+            candidate_response = download_session.get(url, stream=True, timeout=timeout)
             candidate_response.raise_for_status()
-        except requests.HTTPError as exc:
+        except requests.RequestException as exc:
             last_error = exc
+            if candidate_response is not None:
+                try:
+                    candidate_response.close()
+                except Exception:
+                    pass
             continue
         response = candidate_response
         selected_url = url

@@ -229,7 +229,7 @@ def _get_input_field_names(input_path):
             raise RuntimeError("pyarrow is required for parquet input support.")
         parquet_file = pq.ParquetFile(input_path)
         return parquet_file.schema.names
-    with open(input_path, "r+") as f:
+    with open(input_path, "r", newline="") as f:
         reader = csv.reader(f)
         return next(reader)
 
@@ -591,13 +591,17 @@ def flood_damage(UDFOrig, LUT_Dir, ResultsDir, DepthGrids, QC_Warning, fmap):
             pixelWidth = _t.a
             pixelHeight = -_t.e
             data = _raster_src.read(1)
-            print(data)
+            logger.debug(
+                "Loaded raster band with shape %s and dtype %s",
+                getattr(data, "shape", None),
+                getattr(data, "dtype", None),
+            )
 
             IsUTM = (
                 _raster_src.crs is not None and _raster_src.crs.is_projected and _raster_src.crs.linear_units == "metre"
             )
             _raster_src.close()
-            print("Is it UTM? ", IsUTM)
+            logger.debug("Is raster in projected UTM coordinates? %s", IsUTM)
 
             """
             inProj = Proj(init='epsg:3857')
@@ -671,7 +675,7 @@ def flood_damage(UDFOrig, LUT_Dir, ResultsDir, DepthGrids, QC_Warning, fmap):
                                 # If incorrect depth grid used the depth is set to 0
                                 val = (
                                     data[roww][col]
-                                    if abs(col) < abs(cols) and abs(roww) < abs(rows) and data[roww][col] != noData
+                                    if 0 <= col < cols and 0 <= roww < rows and data[roww][col] != noData
                                     else 0
                                 )
                                 # val = retrieve_pixel_value((Y,X))
@@ -1394,7 +1398,7 @@ def flood_damage(UDFOrig, LUT_Dir, ResultsDir, DepthGrids, QC_Warning, fmap):
             csv_input = csv.DictReader(open(outputDir, "r", newline=""))  # csv.DictReader(f_input)
             data = sorted(
                 csv.DictReader(open(outputDir, "r", newline="")),
-                key=lambda row: (abs(float(row["Depth_in_Struc"])) < 0, float(row["Depth_in_Struc"])),
+                key=lambda row: float(row["Depth_in_Struc"]),
                 reverse=True,
             )
             # f_input.close()
@@ -1424,7 +1428,7 @@ def flood_damage(UDFOrig, LUT_Dir, ResultsDir, DepthGrids, QC_Warning, fmap):
                 + "\n"
                 + str(grid[0])
                 + " records processed of "
-                + str(grid[0])
+                + str(grid[1])
                 + " records total.\n"
                 + "Total records with flooding: "
                 + str(grid[2])
@@ -1446,7 +1450,7 @@ def flood_damage(UDFOrig, LUT_Dir, ResultsDir, DepthGrids, QC_Warning, fmap):
         logger.info(e)
         print(e)
         print(f"FAST fatal error: {e}", file=sys.stderr)
-        return (False, counter, 0)
+        return (False, str(e), 0)
 
 
 # This test allows the script to be used from the operating
