@@ -270,30 +270,55 @@ class NSIDownloader:
 
         return pd.concat(nsi_dfs, ignore_index=True)
 
+    REQUIRED_HF_COLS = frozenset({"cbfips", "bid", "longitude", "latitude"})
+
     def download_states_hf(
         self,
         state_names: list,
         repo_id: str = "Alexq847182/NSI_Parquet",
         token: str | None = None,
     ) -> pd.DataFrame:
-        """Download NSI from a HuggingFace dataset repo, filtering per-file to affected states.
+        """Download NSI from a HuggingFace dataset repo, filtering per-file.
 
-        Each parquet file is filtered to the requested states immediately after reading,
-        keeping peak memory low.
+        Each parquet file is filtered to the requested states immediately
+        after reading, keeping peak memory low.
         """
         from huggingface_hub import HfApi, hf_hub_download
 
         keep_cols = self.KEEP_COLS + ["longitude", "latitude"]
-        affected_fips = {self.STATE_FIPS[s] for s in state_names if s in self.STATE_FIPS}
+
+        # Case-insensitive lookup handles pygris variations
+        # (e.g. "District of Columbia" vs "District Of Columbia")
+        fips_by_lower = {
+            k.lower(): v for k, v in self.STATE_FIPS.items()
+        }
+        affected_fips: set[str] = set()
+        for s in state_names:
+            fips = fips_by_lower.get(s.lower())
+            if fips:
+                affected_fips.add(fips)
+            else:
+                warnings.warn(f"No FIPS for {s!r}, skipping")
         if not affected_fips:
-            raise ValueError(f"No valid state FIPS found for: {state_names}")
+            raise ValueError(
+                f"No valid state FIPS found for: {state_names}"
+            )
 
         api = HfApi()
-        repo_files = api.list_repo_files(repo_id, repo_type="dataset", token=token)
-        parquet_files = [f for f in repo_files if f.endswith(".parquet")]
+        repo_files = api.list_repo_files(
+            repo_id, repo_type="dataset", token=token
+        )
+        parquet_files = [
+            f for f in repo_files if f.endswith(".parquet")
+        ]
         if not parquet_files:
-            raise FileNotFoundError(f"No parquet files found in HF dataset {repo_id}")
-        print(f"Found {len(parquet_files)} parquet file(s) in {repo_id}")
+            raise FileNotFoundError(
+                f"No parquet files in HF dataset {repo_id}"
+            )
+        print(
+            f"Found {len(parquet_files)} parquet file(s) "
+            f"in {repo_id}"
+        )
 
         hf_cache_dir = self.work_dir / "hf_nsi_cache"
         hf_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -302,7 +327,11 @@ class NSIDownloader:
         t0 = time.time()
         total_bytes = 0
 
-        with tqdm(total=len(parquet_files), desc="Downloading NSI from HuggingFace", unit="file") as pbar:
+        with tqdm(
+            total=len(parquet_files),
+            desc="Downloading NSI from HuggingFace",
+            unit="file",
+        ) as pbar:
             for pf in parquet_files:
                 local_path = hf_hub_download(
                     repo_id=repo_id,
@@ -315,14 +344,34 @@ class NSIDownloader:
                 total_bytes += file_bytes
 
                 df_part = pd.read_parquet(local_path)
-                available_cols = [c for c in keep_cols if c in df_part.columns]
+
+                # Fail fast if required columns are missing
+                missing = self.REQUIRED_HF_COLS - set(
+                    df_part.columns
+                )
+                if missing:
+                    raise ValueError(
+                        f"HF parquet {pf!r} missing required "
+                        f"columns: {sorted(missing)}. "
+                        f"Available: {sorted(df_part.columns)}"
+                    )
+
+                available_cols = [
+                    c for c in keep_cols if c in df_part.columns
+                ]
                 df_part = df_part[available_cols]
 
-                # Filter to affected states immediately to reduce memory
-                if "cbfips" in df_part.columns:
-                    df_part = df_part[
-                        df_part["cbfips"].astype(str).str[:2].isin(affected_fips)
-                    ]
+                # Zero-pad cbfips to 15 digits before slicing
+                # state FIPS — handles numeric parquet columns
+                # that lose leading zeros.
+                df_part = df_part[df_part["cbfips"].notna()]
+                state_col = (
+                    df_part["cbfips"]
+                    .astype(str)
+                    .str.zfill(15)
+                    .str[:2]
+                )
+                df_part = df_part[state_col.isin(affected_fips)]
 
                 if not df_part.empty:
                     nsi_dfs.append(df_part)
@@ -334,9 +383,13 @@ class NSIDownloader:
 
         if not nsi_dfs:
             raise RuntimeError(
-                f"No NSI buildings found for states {state_names} in HF dataset {repo_id}"
+                f"No NSI buildings found for states "
+                f"{state_names} in HF dataset {repo_id}"
             )
 
         result = pd.concat(nsi_dfs, ignore_index=True)
-        print(f"Filtered to {len(affected_fips)} state(s): {affected_fips} — {len(result):,} buildings")
+        print(
+            f"Filtered to {len(affected_fips)} state(s): "
+            f"{affected_fips} — {len(result):,} buildings"
+        )
         return result
