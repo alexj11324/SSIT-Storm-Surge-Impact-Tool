@@ -123,3 +123,15 @@ When asking, provide exactly what is missing and a recommended default.
 3. NHC P-Surge rasters are downloaded directly from NHC and stored in `FAST-main/rasters/`.
 4. Pipeline execution uses `scripts/duckdb_fast_pipeline.py` (DuckDB SQL) for all data transformation.
 5. Shelter demand analysis runs in Google Colab via `notebooks/shelter_demand.ipynb`.
+
+## Learned User Preferences
+
+- Prefer cell-level notebook editing (for example `EditNotebook`) over rewriting `.ipynb` via shell; if the user forbids bash for a notebook change, do not use shell to edit the notebook.
+- For `notebooks/shelter_demand.ipynb`, use `tqdm` with speed or rate display (for example postfix MB/s or it/s) on every download and streaming-fetch code path, not only a subset of cells.
+- For `notebooks/shelter_demand.ipynb`, when static checkers flag cross-cell variables, prefer passing data via small artifacts under `WORK_DIR` (for example a join CSV written after the upstream cell) instead of referencing in-memory variables only defined in earlier cells.
+
+## Learned Workspace Facts
+
+- Team-processed NSI/SLOSH may live in S3 as partitioned Parquet; the Athena/Glue catalog can expose more than one SLOSH table with different schemas—confirm the authoritative table and prefix before building joins (see `docs/` and slide materials for bucket paths).
+- US state abbreviations and related metadata live in `scripts/us_states.py` (`STATE_BY_ABBR`, `STATE_SPECS`, and related maps); scripts should import from there instead of duplicating state lists.
+- In `notebooks/shelter_demand.ipynb`, `from scripts.*` requires the repository root on `sys.path` early (for example in the first setup cell). If the layout has no `repo/` clone or the kernel cwd is under `notebooks/`, resolve the project root so `scripts/` is discoverable (for example via `Path.cwd()` or parent directories), not only `notebooks/repo`.

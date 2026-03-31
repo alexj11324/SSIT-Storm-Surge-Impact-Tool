@@ -19,6 +19,41 @@ FAST_INPUT_COLUMNS = [
     "Longitude",
 ]
 
+# Canonical NSI found_type -> FAST FoundationType mapping (single source of truth).
+# Both the DuckDB pipeline (SQL CASE) and the notebook (pandas .map) use this dict.
+FOUND_TYPE_MAP: dict[str, int] = {
+    "S": 7,
+    "SLAB": 7,
+    "SLAB ON GRADE": 7,
+    "7": 7,
+    "C": 5,
+    "CRAWL": 5,
+    "CRAWLSPACE": 5,
+    "CRAWL SPACE": 5,
+    "5": 5,
+    "F": 5,
+    "I": 5,
+    "W": 5,
+    "B": 4,
+    "BASEMENT": 4,
+    "4": 4,
+    "P": 2,
+    "PIER": 2,
+    "PILE": 2,
+    "PILES": 2,
+    "PIER/PILE": 2,
+    "2": 2,
+}
+FOUND_TYPE_DEFAULT = 7
+
+
+def _found_type_sql_case() -> str:
+    """Generate SQL CASE expression from FOUND_TYPE_MAP."""
+    whens = "\n".join(
+        f"                WHEN '{k}'{' ' * max(0, 14 - len(k))}THEN {v}" for k, v in FOUND_TYPE_MAP.items()
+    )
+    return f"CASE UPPER(TRIM(found_type))\n{whens}\n                ELSE {FOUND_TYPE_DEFAULT}\n            END"
+
 
 def _raster_bbox_wgs84(raster_path: str):
     """Return (min_lon, min_lat, max_lon, max_lat) in EPSG:4326."""
@@ -37,7 +72,12 @@ def build_fast_csv_duckdb(
     flc: str = "CoastalA",
     occupancy_csv: str | None = None,
 ) -> int:
-    """Build FAST CSV from NSI parquet files using DuckDB. Returns row count."""
+    """Build FAST CSV from NSI parquet files using DuckDB.
+
+    `flc` and `occupancy_csv` are accepted for backward compatibility with older
+    callers, but the DuckDB extraction step does not use them.
+    """
+    _ = flc, occupancy_csv
     min_lon, min_lat, max_lon, max_lat = _raster_bbox_wgs84(raster_path)
 
     con = duckdb.connect()
@@ -70,26 +110,7 @@ def build_fast_csv_duckdb(
             val_struct                                   AS Cost,
             sqft                                         AS Area,
             num_story                                    AS NumStories,
-            CASE UPPER(TRIM(found_type))
-                WHEN 'S'              THEN 7
-                WHEN 'SLAB'           THEN 7
-                WHEN 'SLAB ON GRADE'  THEN 7
-                WHEN '7'              THEN 7
-                WHEN 'C'              THEN 5
-                WHEN 'CRAWL'          THEN 5
-                WHEN 'CRAWL SPACE'    THEN 5
-                WHEN '5'              THEN 5
-                WHEN 'F'              THEN 5
-                WHEN 'I'              THEN 5
-                WHEN 'W'              THEN 5
-                WHEN 'B'              THEN 4
-                WHEN 'BASEMENT'       THEN 4
-                WHEN '4'              THEN 4
-                WHEN 'P'              THEN 2
-                WHEN 'PIER'           THEN 2
-                WHEN '2'              THEN 2
-                ELSE 7
-            END                                          AS FoundationType,
+            {_found_type_sql_case()}                      AS FoundationType,
             found_ht                                     AS FirstFloorHt,
             COALESCE(val_cont, 0)                        AS ContentCost,
             latitude                                     AS Latitude,
@@ -110,8 +131,15 @@ if __name__ == "__main__":
     parser.add_argument("--parquet-glob", required=True, help="Glob pattern for parquet files")
     parser.add_argument("--raster", required=True, help="Path to depth raster (GeoTIFF)")
     parser.add_argument("--output", required=True, help="Output CSV path")
-    parser.add_argument("--flc", default="CoastalA", help="Flood loss category")
+    parser.add_argument(
+        "--flc",
+        default="CoastalA",
+        help=(
+            "Deprecated compatibility flag; ignored here because the flood-loss "
+            "category is supplied when running FAST, not when generating the CSV."
+        ),
+    )
     args = parser.parse_args()
 
-    n = build_fast_csv_duckdb(args.parquet_glob, args.raster, args.output, args.flc)
+    n = build_fast_csv_duckdb(args.parquet_glob, args.raster, args.output, flc=args.flc)
     print(f"Wrote {n:,} rows to {args.output}")

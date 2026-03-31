@@ -1,5 +1,6 @@
 # Large generated artifacts
 exports/
+repo/outputs/
 
 # Python caches
 __pycache__/
@@ -28,5 +29,9 @@ venv/
 # Jupyter
 .ipynb_checkpoints/
 
-# Local assistant configs
+# Local assistant configs (entire tree ignored; force-add paths you must share, e.g. .cursor/skills/**/SKILL.md)
 .claude/
+.cursor/
+
+# Notebook backups
+*.backup.ipynb

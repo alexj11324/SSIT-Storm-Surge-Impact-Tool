@@ -11,9 +11,10 @@ dependencies = [
     "duckdb",
     "geopandas",
     "requests",
-    "numpy",
+    "numpy<2",
     "pandas",
     "shapely",
+    "utm",
 ]
 
 [project.optional-dependencies]
