@@ -21,9 +21,7 @@ def _make_zip_bytes(storm_name: str, year: int, adv: int, tif_bytes: bytes = b"f
 
 
 def _make_archive_html(*filenames: str) -> str:
-    return "\n".join(
-        f'<a href="inundation/forecasts/{filename}">{filename}</a><br>' for filename in filenames
-    )
+    return "\n".join(f'<a href="inundation/forecasts/{filename}">{filename}</a><br>' for filename in filenames)
 
 
 class _DummyResponse:
@@ -31,10 +29,17 @@ class _DummyResponse:
         self.content = content
         self.text = text if text is not None else content.decode("utf-8", errors="ignore")
         self.status_code = status_code
+        self.headers = {"Content-Length": str(len(content))}
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
             raise nhc.requests.HTTPError(f"{self.status_code} Client Error")
+
+    def iter_content(self, chunk_size: int = 1024) -> list[bytes]:
+        return [self.content]
+
+    def close(self) -> None:
+        pass
 
 
 class _DummyErrorResponse(_DummyResponse):
@@ -53,7 +58,7 @@ def _patch_memory_file():
 
 
 @patch("scripts.import_nhc_by_storm.gpd.sjoin")
-@patch("scripts.import_nhc_by_storm.states")
+@patch("scripts.import_nhc_by_storm._pygris_states")
 def test_importer_returns_states_and_readable_raster(mock_states, mock_sjoin):
     zip_bytes = _make_zip_bytes("BERYL", 2024, 29)
     mock_session = MagicMock()
@@ -63,9 +68,7 @@ def test_importer_returns_states_and_readable_raster(mock_states, mock_sjoin):
     ]
 
     state_geom = box(-1, -1, 1, 1)
-    states_gdf = gpd.GeoDataFrame(
-        {"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326"
-    )
+    states_gdf = gpd.GeoDataFrame({"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326")
     mock_states.return_value = states_gdf
     mock_sjoin.return_value = states_gdf
 
@@ -76,7 +79,9 @@ def test_importer_returns_states_and_readable_raster(mock_states, mock_sjoin):
     assert result["states"] == ["TestState"]
     data = result["data"].read(1)
     assert data.shape == (1, 1)
-    called_urls = [call.kwargs["url"] if "url" in call.kwargs else call.args[0] for call in mock_session.get.call_args_list]
+    called_urls = [
+        call.kwargs["url"] if "url" in call.kwargs else call.args[0] for call in mock_session.get.call_args_list
+    ]
     assert called_urls == [
         nhc.NHC_INUNDATION_INDEX_URL,
         "https://www.nhc.noaa.gov/gis/inundation/forecasts/AL0224_29_tidalmask.zip",
@@ -85,7 +90,7 @@ def test_importer_returns_states_and_readable_raster(mock_states, mock_sjoin):
 
 
 @patch("scripts.import_nhc_by_storm.gpd.sjoin")
-@patch("scripts.import_nhc_by_storm.states")
+@patch("scripts.import_nhc_by_storm._pygris_states")
 def test_importer_handles_no_overlapping_states(mock_states, mock_sjoin):
     zip_bytes = _make_zip_bytes("BERYL", 2024, 29)
     mock_session = MagicMock()
@@ -96,9 +101,7 @@ def test_importer_handles_no_overlapping_states(mock_states, mock_sjoin):
 
     geom = box(-1, -1, 1, 1)
     empty_gdf = gpd.GeoDataFrame({"NAME": [], "geometry": []}, geometry="geometry", crs="EPSG:4326")
-    mock_states.return_value = gpd.GeoDataFrame(
-        {"NAME": ["Other"], "geometry": [geom]}, crs="EPSG:4326"
-    )
+    mock_states.return_value = gpd.GeoDataFrame({"NAME": ["Other"], "geometry": [geom]}, crs="EPSG:4326")
     mock_sjoin.return_value = empty_gdf
 
     memory_file_patch, _ = _patch_memory_file()
@@ -116,7 +119,7 @@ def test_normalizes_storm_id_with_two_digit_year():
 
 
 @patch("scripts.import_nhc_by_storm.gpd.sjoin")
-@patch("scripts.import_nhc_by_storm.states")
+@patch("scripts.import_nhc_by_storm._pygris_states")
 def test_importer_falls_back_to_legacy_and_latest_urls(mock_states, mock_sjoin):
     zip_bytes = _make_zip_bytes("BERYL", 2024, 29)
     mock_session = MagicMock()
@@ -127,9 +130,7 @@ def test_importer_falls_back_to_legacy_and_latest_urls(mock_states, mock_sjoin):
     ]
 
     state_geom = box(-1, -1, 1, 1)
-    states_gdf = gpd.GeoDataFrame(
-        {"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326"
-    )
+    states_gdf = gpd.GeoDataFrame({"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326")
     mock_states.return_value = states_gdf
     mock_sjoin.return_value = states_gdf
 
@@ -137,7 +138,9 @@ def test_importer_falls_back_to_legacy_and_latest_urls(mock_states, mock_sjoin):
     with memory_file_patch:
         result = nhc.import_surge_data("AL022024", "BERYL", 29, 2024, session=mock_session, timeout=5)
 
-    called_urls = [call.kwargs["url"] if "url" in call.kwargs else call.args[0] for call in mock_session.get.call_args_list]
+    called_urls = [
+        call.kwargs["url"] if "url" in call.kwargs else call.args[0] for call in mock_session.get.call_args_list
+    ]
     assert called_urls == [
         nhc.NHC_INUNDATION_INDEX_URL,
         "https://www.nhc.noaa.gov/gis/inundation/forecasts/AL0224_29_tidalmask.zip",

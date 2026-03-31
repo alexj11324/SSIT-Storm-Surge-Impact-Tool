@@ -35,8 +35,7 @@ NHC P-Surge GeoTIFF (FAST-main/rasters/)                  |
 python scripts/duckdb_fast_pipeline.py \
   --parquet-glob "data/nsi/state=FL/*.parquet" \
   --raster FAST-main/rasters/IAN_2022_adv33_e10_ResultMaskRaster.tif \
-  --output outputs/fast_input.csv \
-  --flc CoastalA
+  --output outputs/fast_input.csv
 
 # H3 spatial index
 python scripts/h3_spatial_index.py --raster path/to/raster.tif --parquet data/nsi/*.parquet --resolution 7

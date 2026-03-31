@@ -95,74 +95,30 @@ USACE National Structure Inventory: <https://nsi.sec.usace.army.mil/>
 Public domain (US Government work).
 """
 
-ALL_STATE_ABBRS = [
-    "AL",
-    "AK",
-    "AZ",
-    "AR",
-    "CA",
-    "CO",
-    "CT",
-    "DE",
-    "DC",
-    "FL",
-    "GA",
-    "HI",
-    "ID",
-    "IL",
-    "IN",
-    "IA",
-    "KS",
-    "KY",
-    "LA",
-    "ME",
-    "MD",
-    "MA",
-    "MI",
-    "MN",
-    "MS",
-    "MO",
-    "MT",
-    "NE",
-    "NV",
-    "NH",
-    "NJ",
-    "NM",
-    "NY",
-    "NC",
-    "ND",
-    "OH",
-    "OK",
-    "OR",
-    "PA",
-    "RI",
-    "SC",
-    "SD",
-    "TN",
-    "TX",
-    "UT",
-    "VT",
-    "VA",
-    "WA",
-    "WV",
-    "WI",
-    "WY",
-]
-
 
 def download_all_states(output_dir: str, engine: str = "duckdb") -> None:
-    """Run download_nsi_by_state.py for all 51 state/territory entries."""
-    script = Path(__file__).parent / "download_nsi_by_state.py"
-    cmd = [sys.executable, str(script)]
-    for abbr in ALL_STATE_ABBRS:
-        cmd.extend(["--state", abbr])
-    cmd.extend(["--output-dir", output_dir, "--engine", engine, "--overwrite"])
+    """Run download_nsi_by_state.py for all states defined in STATE_BY_ABBR.
 
-    print(f"Downloading {len(ALL_STATE_ABBRS)} states to {output_dir} ...")
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        print("WARNING: download exited with non-zero code; some states may have failed.")
-        print("Re-run with --overwrite to retry failed states.")
+    Raises SystemExit if the download phase fails.
+    """
+    try:
+        from scripts.download_nsi_by_state import main as download_main
+        from scripts.us_states import STATE_BY_ABBR
+    except ImportError:
+        from download_nsi_by_state import main as download_main  # type: ignore[import-not-found]
+        from us_states import STATE_BY_ABBR  # type: ignore[import-not-found]
+
+    all_abbrs = sorted(STATE_BY_ABBR.keys())
+    argv: list[str] = []
+    for abbr in all_abbrs:
+        argv.extend(["--state", abbr])
+    argv.extend(["--output-dir", output_dir, "--engine", engine, "--overwrite"])
+
+    print(f"Downloading {len(all_abbrs)} states to {output_dir} ...")
+    rc = download_main(argv)
+    if rc != 0:
+        print("ERROR: download phase failed; aborting before upload to prevent publishing incomplete data.")
+        sys.exit(1)
 
 
 def upload_to_hf(parquet_dir: str, repo_id: str, token: str | None, private: bool) -> None:
@@ -256,16 +212,10 @@ def main(argv: list[str] | None = None) -> int:
         choices=["duckdb", "geopandas"],
         help="Conversion engine for GeoJSON -> Parquet (default: duckdb)",
     )
-    parser.add_argument(
-        "--upload-only",
-        action="store_true",
-        help="Skip download, upload existing Parquet files only",
-    )
 
     args = parser.parse_args(argv)
 
-    # Step 1: Download
-    if args.download_all and not args.upload_only:
+    if args.download_all:
         download_all_states(args.output_dir, engine=args.engine)
 
     # Step 2: Upload

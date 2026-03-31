@@ -31,9 +31,12 @@ venv/
 
 # Local assistant configs
 .claude/
-.cursor/debug-31e34b.log
+.cursor/
+
+# Notebook backups
+*.backup.ipynb
+.cursor/hooks/state/continual-learning-index.json
+.cursor/hooks/state/continual-learning-index.json
+.cursor/hooks/state/continual-learning-index.json
+.cursor/hooks/state/continual-learning-index.json
 .cursor/hooks/state/continual-learning.json
-.cursor/hooks/state/continual-learning.json
-.cursor/hooks/state/continual-learning.json
-.cursor/hooks/state/continual-learning.json
-.gitignore

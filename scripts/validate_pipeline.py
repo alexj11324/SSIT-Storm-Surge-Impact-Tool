@@ -112,7 +112,7 @@ def main() -> int:
         "file": str(csv_path),
         "summary": summary,
         "issues": all_issues,
-        "passed": len([i for i in all_issues if i.startswith("FAIL")]) == 0,
+        "passed": not any(i.startswith("FAIL") for i in all_issues),
     }
 
     print(json.dumps(report, indent=2))

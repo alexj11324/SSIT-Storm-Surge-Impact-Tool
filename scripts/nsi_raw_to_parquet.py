@@ -70,19 +70,11 @@ def _convert_duckdb(input_path: str, output_path: str) -> int:
     except Exception:
         srid = 4326  # assume WGS84 if detection fails
 
-    geom_x = (
-        "ST_X(ST_Transform(geom, 'EPSG:4326', 'EPSG:4326'))"
-        if srid == 4326
-        else f"ST_X(ST_Transform(geom, 'EPSG:{srid}', 'EPSG:4326'))"
-    )
-    geom_y = (
-        "ST_Y(ST_Transform(geom, 'EPSG:4326', 'EPSG:4326'))"
-        if srid == 4326
-        else f"ST_Y(ST_Transform(geom, 'EPSG:{srid}', 'EPSG:4326'))"
-    )
-
     if srid == 4326:
         geom_x, geom_y = "ST_X(geom)", "ST_Y(geom)"
+    else:
+        geom_x = f"ST_X(ST_Transform(geom, 'EPSG:{srid}', 'EPSG:4326'))"
+        geom_y = f"ST_Y(ST_Transform(geom, 'EPSG:{srid}', 'EPSG:4326'))"
 
     # Build SELECT list: use raw columns if they exist, NULL otherwise
     col_info = con.execute(f"DESCRIBE SELECT * FROM st_read('{input_path}') LIMIT 0").fetchall()
@@ -191,9 +183,7 @@ def convert_raw_nsi_to_parquet(input_path: str, output_path: str, engine: str = 
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Convert raw NSI GPKG/GeoJSON to processed Parquet"
-    )
+    parser = argparse.ArgumentParser(description="Convert raw NSI GPKG/GeoJSON to processed Parquet")
     parser.add_argument("--input", required=True, help="Path to GPKG/GeoJSON (or glob)")
     parser.add_argument("--output", required=True, help="Output parquet path")
     parser.add_argument(

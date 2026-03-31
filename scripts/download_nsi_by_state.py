@@ -10,7 +10,6 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, TextIO
@@ -22,89 +21,23 @@ except ImportError:  # pragma: no cover - exercised when the script is run direc
     from nsi_raw_to_parquet import convert_raw_nsi_to_parquet, validate_schema
 
 
-API_ROOT = "https://nsi.sec.usace.army.mil/nsiapi/structures"
+try:
+    from . import us_states as _us_states
+except ImportError:  # pragma: no cover
+    import us_states as _us_states  # type: ignore[import-not-found]
+
+API_ROOT = _us_states.API_BASE
+StateSpec = _us_states.StateSpec
+STATE_SPECS = _us_states.STATE_SPECS
+STATE_BY_FIPS = _us_states.STATE_BY_FIPS
+STATE_BY_ABBR = _us_states.STATE_BY_ABBR
+STATE_BY_NAME = _us_states.STATE_BY_NAME
+
 DEFAULT_TIMEOUT = 600.0
 DEFAULT_RETRIES = 3
 FEATURE_COLLECTION_PREFIX = '{"type":"FeatureCollection","features":['
 FEATURE_COLLECTION_SUFFIX = "]}"
 GEOPANDAS_MEMORY_WARNING_FIPS = {"06", "12", "13", "22", "37", "48"}
-
-
-@dataclass(frozen=True)
-class StateSpec:
-    name: str
-    abbr: str
-    fips: str
-
-    @property
-    def path_name(self) -> str:
-        return self.name.replace(" ", "_")
-
-    @property
-    def api_url(self) -> str:
-        return f"{API_ROOT}?fips={self.fips}&fmt=fs"
-
-
-STATE_SPECS = [
-    StateSpec("Alabama", "AL", "01"),
-    StateSpec("Alaska", "AK", "02"),
-    StateSpec("Arizona", "AZ", "04"),
-    StateSpec("Arkansas", "AR", "05"),
-    StateSpec("California", "CA", "06"),
-    StateSpec("Colorado", "CO", "08"),
-    StateSpec("Connecticut", "CT", "09"),
-    StateSpec("Delaware", "DE", "10"),
-    StateSpec("District Of Columbia", "DC", "11"),
-    StateSpec("Florida", "FL", "12"),
-    StateSpec("Georgia", "GA", "13"),
-    StateSpec("Hawaii", "HI", "15"),
-    StateSpec("Idaho", "ID", "16"),
-    StateSpec("Illinois", "IL", "17"),
-    StateSpec("Indiana", "IN", "18"),
-    StateSpec("Iowa", "IA", "19"),
-    StateSpec("Kansas", "KS", "20"),
-    StateSpec("Kentucky", "KY", "21"),
-    StateSpec("Louisiana", "LA", "22"),
-    StateSpec("Maine", "ME", "23"),
-    StateSpec("Maryland", "MD", "24"),
-    StateSpec("Massachusetts", "MA", "25"),
-    StateSpec("Michigan", "MI", "26"),
-    StateSpec("Minnesota", "MN", "27"),
-    StateSpec("Mississippi", "MS", "28"),
-    StateSpec("Missouri", "MO", "29"),
-    StateSpec("Montana", "MT", "30"),
-    StateSpec("Nebraska", "NE", "31"),
-    StateSpec("Nevada", "NV", "32"),
-    StateSpec("New Hampshire", "NH", "33"),
-    StateSpec("New Jersey", "NJ", "34"),
-    StateSpec("New Mexico", "NM", "35"),
-    StateSpec("New York", "NY", "36"),
-    StateSpec("North Carolina", "NC", "37"),
-    StateSpec("North Dakota", "ND", "38"),
-    StateSpec("Ohio", "OH", "39"),
-    StateSpec("Oklahoma", "OK", "40"),
-    StateSpec("Oregon", "OR", "41"),
-    StateSpec("Pennsylvania", "PA", "42"),
-    StateSpec("Rhode Island", "RI", "44"),
-    StateSpec("South Carolina", "SC", "45"),
-    StateSpec("South Dakota", "SD", "46"),
-    StateSpec("Tennessee", "TN", "47"),
-    StateSpec("Texas", "TX", "48"),
-    StateSpec("Utah", "UT", "49"),
-    StateSpec("Vermont", "VT", "50"),
-    StateSpec("Virginia", "VA", "51"),
-    StateSpec("Washington", "WA", "53"),
-    StateSpec("West Virginia", "WV", "54"),
-    StateSpec("Wisconsin", "WI", "55"),
-    StateSpec("Wyoming", "WY", "56"),
-]
-
-STATE_BY_FIPS = {state.fips: state for state in STATE_SPECS}
-STATE_BY_ABBR = {state.abbr: state for state in STATE_SPECS}
-STATE_BY_NAME = {
-    re.sub(r"\s+", " ", state.name.replace("-", " ").strip()).lower(): state
-    for state in STATE_SPECS
-}
 
 
 def log(message: str) -> None:
@@ -189,9 +122,7 @@ def open_url_with_retries(url: str, timeout: float, retries: int):
             if attempt > retries:
                 break
             sleep_seconds = min(5, attempt)
-            log(
-                f"Request failed for {url} (attempt {attempt}/{retries + 1}): {exc}. Retrying in {sleep_seconds}s..."
-            )
+            log(f"Request failed for {url} (attempt {attempt}/{retries + 1}): {exc}. Retrying in {sleep_seconds}s...")
             time.sleep(sleep_seconds)
     raise RuntimeError(f"failed to download NSI API response from {url}") from last_error
 
@@ -279,13 +210,9 @@ def build_output_dir(custom_output_dir: str | None) -> Path:
     return (Path("exports") / "nsi_downloads" / run_id).resolve()
 
 
-def warn_about_runtime_risks(
-    states: list[StateSpec], engine: str, custom_output_dir: str | None
-) -> None:
+def warn_about_runtime_risks(states: list[StateSpec], engine: str, custom_output_dir: str | None) -> None:
     if engine == "geopandas":
-        large_states = [
-            state.name for state in states if state.fips in GEOPANDAS_MEMORY_WARNING_FIPS
-        ]
+        large_states = [state.name for state in states if state.fips in GEOPANDAS_MEMORY_WARNING_FIPS]
         if large_states:
             joined = ", ".join(large_states)
             log(
@@ -309,9 +236,7 @@ def download_state_inventory(
     retries: int,
 ) -> dict[str, Any]:
     raw_geojson_path = output_dir / "raw" / f"nsi_2022_{state.fips}_{state.path_name}.geojson"
-    parquet_path = (
-        output_dir / "processed" / "nsi" / f"state={state.path_name}" / "part-00000.snappy.parquet"
-    )
+    parquet_path = output_dir / "processed" / "nsi" / f"state={state.path_name}" / "part-00000.snappy.parquet"
 
     ensure_output_paths([raw_geojson_path, parquet_path], overwrite=overwrite)
 
