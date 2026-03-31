@@ -19,7 +19,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
-ml = ["scikit-learn", "lightgbm", "xgboost"]
 
 [tool.ruff]
 line-length = 100

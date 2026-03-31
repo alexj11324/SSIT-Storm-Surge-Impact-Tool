@@ -14,4 +14,4 @@ Red Cross disaster response staff and operational planners with limited technica
 ## Key Goals
 1. Provide building-level damage predictability within hours of a major event.
 2. Integrate output seamlessly into existing Excel-based shelter and response workflows.
-3. Build a scalable, modular geospatial data pipeline based on open standards (PDDL, Python, cloud storage).
+3. Build a scalable, modular geospatial data pipeline based on open standards (Parquet, Python, GeoTIFF).

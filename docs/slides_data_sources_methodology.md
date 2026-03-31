@@ -1,6 +1,6 @@
 # Data Sources and Methodology
 
-> **Note**: Sections referencing AWS S3, Athena, and `fast_e2e_from_oracle.py` describe the original cloud architecture. The current pipeline runs locally with DuckDB + Google Colab. See `docs/e2e_pipeline.md` for the current data flow.
+> **Historical Reference**: Sections referencing AWS S3, Athena, and `fast_e2e_from_oracle.py` describe the original cloud architecture. The production pipeline now runs locally with DuckDB (Stages 1-2) and Google Colab (Stages 3-4). Data source descriptions (Sections 1-2) and FAST output schema (Section 4) remain accurate. For the current data flow, see `docs/e2e_pipeline.md`.
 
 ---
 
