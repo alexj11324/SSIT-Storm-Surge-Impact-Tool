@@ -24,8 +24,7 @@ See `docs/e2e_pipeline.md` for the full Mermaid diagram.
 - FAST engine (`FAST-main/Python_env/run_fast.py`)
 
 ```bash
-pip install pyarrow rasterio pyyaml h3 duckdb geopandas
-pip install ruff  # linting
+pip install -e '.[dev]'
 ```
 
 ## Quick Start
@@ -49,14 +48,17 @@ python scripts/validate_pipeline.py path/to/output.csv
 
 | Script | Description | Key Flags |
 |--------|-------------|-----------|
-| `duckdb_fast_pipeline.py` | NSI Parquet -> FAST CSV | `--parquet-glob`, `--raster`, `--output` (all required) |
+| `duckdb_fast_pipeline.py` | NSI Parquet → FAST CSV (primary pipeline) | `--parquet-glob`, `--raster`, `--output` (all required) |
 | `run_fast.py` | Run FAST engine headless | `--inventory`, `--mapping-json`, `--flc`, `--rasters` (all required), `--pretty` |
 | `download_nsi_by_state.py` | Download NSI from USACE API | `--state` (repeatable), `--output-dir`, `--engine {duckdb,geopandas}` |
+| `nsi_downloader.py` | NSI download client (USACE API + HuggingFace) | Used as library by notebook and other scripts |
+| `nsi_raw_to_parquet.py` | Convert raw NSI to Parquet | `--input`, `--output`, `--engine {duckdb,geopandas}` |
 | `import_nhc_by_storm.py` | Download NHC P-Surge rasters | Edit storm params in script, then run |
 | `validate_pipeline.py` | Validate FAST output CSV | positional `predictions_csv`, `--output-json` |
 | `h3_spatial_index.py` | H3 hex spatial pre-filter | `--raster`, `--parquet` (repeatable), `--resolution` |
-| `nsi_raw_to_parquet.py` | Convert raw NSI to Parquet | `--input`, `--output`, `--engine {duckdb,geopandas}` |
 | `upload_nsi_to_hf.py` | Upload NSI to Hugging Face | `--repo-id`, `--parquet-dir`, `--download-all` |
+| `read_excel_config.py` | Load config from Excel interface | Used as library: `load_config_from_excel(path)` |
+| `us_states.py` | State FIPS, abbreviations, API URLs | Used as library: `from scripts.us_states import STATE_BY_ABBR` |
 
 ## Project Structure
 
@@ -64,58 +66,53 @@ python scripts/validate_pipeline.py path/to/output.csv
 scripts/
   duckdb_fast_pipeline.py       # Primary pipeline: NSI Parquet -> FAST CSV
   download_nsi_by_state.py      # Download NSI from USACE API -> Parquet
-  import_nhc_by_storm.py        # Download NHC P-Surge rasters
+  nsi_downloader.py             # NSI download client (USACE API + HuggingFace)
   nsi_raw_to_parquet.py         # Raw NSI GPKG/GeoJSON -> Parquet
+  import_nhc_by_storm.py        # Download NHC P-Surge rasters
   h3_spatial_index.py           # H3 hex spatial pre-filtering
   validate_pipeline.py          # Post-run validation: schema + stats
   upload_nsi_to_hf.py           # Upload NSI Parquet to Hugging Face Hub
+  read_excel_config.py          # Excel config loader (Interface sheet)
+  us_states.py                  # State metadata: FIPS, abbreviations, API URLs
 tests/
   conftest.py                   # Shared pytest fixtures
   test_download_nsi_by_state.py # NSI download tests
   test_import_nhc_by_storm.py   # NHC import tests
+  test_duckdb_fast_pipeline.py  # DuckDB pipeline tests
+  test_read_excel_config.py     # Excel config parsing tests
+  test_shelter_demand_notebook.py # Notebook validation tests
 notebooks/
   shelter_demand.ipynb          # BHI shelter demand E2E pipeline (Colab) — primary ARC deliverable
 configs/
-  event_state_map.yaml          # Hurricane -> affected states + raster patterns
+  event_state_map.yaml          # Hurricane -> affected states + raster patterns (11 events)
+data/
+  ARC Storm Surge Shelter Demand.xlsx  # Excel config interface (storm params, thresholds, BHI)
+  Ground Truth Data.xlsx               # ARC ground truth for validation (9 hurricanes)
 docs/
   e2e_pipeline.md               # End-to-end pipeline architecture (Mermaid)
-  reflection.md                 # Project insights and learnings
+  DIRECTION.md                  # ML→L/M/H pivot rationale and ARC methodology
   nsi_data_dictionary.md        # NSI field definitions (EN/ZH)
+  wiki/                         # Onboarding guides (zero_to_hero, principal_guide)
+  manual/                       # System manual
+  governance/                   # Product definition
+  archive/                      # Archived docs (reflection, slides_data_sources)
 FAST-main/
   Python_env/run_fast.py        # FAST headless engine (production)
+  Lookuptables/                 # FEMA depth-damage functions
+  rasters/                      # Pre-downloaded flood rasters
 ```
 
 ## Data Sources
 
 | Source | Description | Format |
 |--------|-------------|--------|
-| NSI | USACE National Structure Inventory 2022 | Parquet, partitioned by state |
+| NSI | USACE National Structure Inventory 2022 (30M+ buildings) | Parquet, partitioned by state |
+| NHC P-Surge | NOAA storm surge inundation depth rasters | GeoTIFF (depth in feet) |
+| Census ACS | Population by census tract | API (data.census.gov) |
 | SVI | CDC Social Vulnerability Index | Census tract level |
+| Ground Truth | ARC operational records (9 hurricanes 2018-2024) | Excel |
 
-## Linting
-
-```bash
-ruff check scripts/          # lint
-ruff format scripts/         # auto-format
-```
-
-Config in `pyproject.toml` (E/F/W/I rules, line-length 100, Python 3.10+).
-
-## Key Documentation
-
-| File | Purpose |
-|------|---------|
-| `CLAUDE.md` | AI agent instructions, data contracts, critical gotchas |
-| `AGENTS.md` | Execution contract, column mapping rules, guardrails |
-| `docs/e2e_pipeline.md` | End-to-end pipeline architecture with BHI model (Mermaid) |
-| `docs/DIRECTION.md` | ML→L/M/H pivot rationale and ARC methodology alignment |
-| `docs/nsi_data_dictionary.md` | NSI field definitions (English + Chinese) |
-
-## Output
-
-Per-building: `BldgDmgPct` (% damaged), `BldgLossUSD` ($ loss), `Depth_in_Struc` (ft). These feed into L/M/H classification and shelter demand estimation.
-
-### L/M/H Intensity Classification
+## L/M/H Intensity Classification
 
 Building damage is classified into intensity zones per ARC's Mass Care Planning framework (see `docs/DIRECTION.md`):
 
@@ -127,13 +124,9 @@ Building damage is classified into intensity zones per ARC's Mass Care Planning 
 
 The **Building Habitability Index (BHI)** combines damage state fractions with utility disruption factors to estimate the fraction of residents who will seek shelter. BHI is computed per census tract in `notebooks/shelter_demand.ipynb`.
 
----
-
 ## Prediction Results
 
-Results for 9 hurricane events x 3 advisories (27 runs, ~3.9M building predictions):
-
-**Coverage**
+Results for 9 hurricane events × 3 advisories (27 runs, ~3.9M building predictions):
 
 | Event | Advisories | Buildings | Notes |
 |-------|-----------|-----------|-------|
@@ -179,7 +172,7 @@ Results for 9 hurricane events x 3 advisories (27 runs, ~3.9M building predictio
 | `ContentCost` | Contents replacement value ($) |
 | `ContDmgPct` | Contents damage percentage (%) |
 | `ContentLossUSD` | Contents loss ($) |
-| `InventoryLossUSD` | Inventory loss ($ - commercial buildings) |
+| `InventoryLossUSD` | Inventory loss ($ — commercial buildings) |
 
 **Debris & Recovery**
 
@@ -200,6 +193,26 @@ Results for 9 hurricane events x 3 advisories (27 runs, ~3.9M building predictio
 | `raster_name` | Source raster filename |
 | `run_id` | Pipeline run ID (timestamp-based) |
 | `flc` | Flood class: CoastalA / CoastalV / Riverine |
+
+## Linting
+
+```bash
+ruff check scripts/ tests/          # lint
+ruff format scripts/ tests/         # auto-format
+```
+
+Config in `pyproject.toml` (E/F/W/I rules, line-length 100, Python 3.10+).
+
+## Key Documentation
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | AI agent instructions, critical gotchas, module relationships |
+| `AGENTS.md` | Execution contract, data contracts, guardrails |
+| `docs/e2e_pipeline.md` | End-to-end pipeline architecture with BHI model (Mermaid) |
+| `docs/DIRECTION.md` | ML→L/M/H pivot rationale and ARC methodology alignment |
+| `docs/nsi_data_dictionary.md` | NSI field definitions (English + Chinese) |
+| `docs/wiki/` | Onboarding guides (zero_to_hero, principal_guide) |
 
 ---
 

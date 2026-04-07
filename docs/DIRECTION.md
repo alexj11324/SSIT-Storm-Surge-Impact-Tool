@@ -198,78 +198,32 @@ From FAST data:
 
 ---
 
-## 4. New Implementation Pipeline
+## 4. Current Implementation
 
-### 4.1 Data Flow
+> The original pipeline described here used AWS Athena and scripts `04_classify_lmh.py`, `05_format_for_spreadsheet.py`, `06_validate_lmh.py`. These have been replaced by local DuckDB + Colab.
 
-```
-Athena: arc_storm_surge.predictions (3.5M buildings)
-    ↓ SQL query: per-building classification
-    ↓ SELECT county_fips5,
-    ↓   CASE WHEN depth_grid > 12 THEN 'HIGH'
-    ↓        WHEN depth_grid >= 9 THEN 'MEDIUM'
-    ↓        WHEN depth_grid >= 4 THEN 'LOW'
-    ↓        ELSE 'NONE' END AS intensity,
-    ↓   occtype, bldgdmgpct, depth_in_struc, pop (if available)
-    ↓
-County-level aggregation:
-    ↓ GROUP BY county_fips5, intensity
-    ↓ COUNT residential buildings per zone
-    ↓ × avg_household_size (2.53) = Population per zone
-    ↓
-Output CSV:
-    county_fips5, county_name, state,
-    pop_affected_low, pop_affected_med, pop_affected_high,
-    pop_impacted_low, pop_impacted_med, pop_impacted_high,
-    hh_shelter_low, hh_shelter_med, hh_shelter_high
-```
+The L/M/H classification described in Sections 1-3 is now implemented as:
 
-### 4.2 Scripts (Implemented)
+- **Stages 1-3 (local)**: `scripts/duckdb_fast_pipeline.py` — DuckDB SQL transforms NSI Parquet → FAST CSV, runs FAST engine, produces per-building predictions.
+- **Stage 4 (Colab)**: `notebooks/shelter_demand.ipynb` — Reads predictions, classifies damage states, computes BHI factor, joins Census ACS population + CDC SVI, estimates shelter-seeking population per census tract.
+- **Stage 5 (local)**: `scripts/validate_pipeline.py` — Schema checks + aggregate stats vs ARC ground truth.
 
-| Script | Purpose |
-|--------|---------|
-| `04_classify_lmh.py` | Athena query: dedup → L/M/H zone classification → county aggregation |
-| `05_format_for_spreadsheet.py` | Census join + SVI join + SVI bump (HIGH zone) + ARC conversion rates → CSV/Excel |
-| `06_validate_lmh.py` | Validation against ground truth (RMSE, MAE, R²) |
-
-### 4.3 Colab Notebook (New Version)
-
-**Input**: NHC advisory → NHC P-Surge raster → FAST building damage predictions (or pre-computed Athena results)
-
-**Processing**:
-1. Load building-level damage data (from Athena query or uploaded CSV)
-2. Classify each building into L/M/H intensity zone
-3. Aggregate to county level
-4. Apply ARC conversion rates for mass care estimates
-
-**Output**: CSV with columns matching Planning Assumptions Spreadsheet (J-R)
-
-### 4.4 Output Schema
-
-```csv
-event,county_fips5,county_name,state,census_pop,
-pop_affected_low,pop_affected_med,pop_affected_high,
-pop_impacted_low,pop_impacted_med,pop_impacted_high,
-hh_shelter_low,hh_shelter_med,hh_shelter_high,
-meals_feeding_low,meals_feeding_med,meals_feeding_high
-```
+See `docs/e2e_pipeline.md` for the full architecture diagram with cell-to-stage mapping.
 
 ---
 
-## 5. What Can Be Reused
+## 5. What Was Reused from Original Design
 
-| Component | Status | Reuse? |
-|-----------|--------|--------|
-| Athena spatial join (county boundaries) | Working | **Yes** — add L/M/H classification |
-| FAST 3.5M building predictions | In Athena | **Yes** — primary data source |
-| Census population by county | Downloaded | **Yes** — same data |
-| Colab notebook framework | Working | **Yes** — restructure output |
-| Excel template framework | Working | **Partially** — change columns to L/M/H |
-| Tier 1 displacement estimate | Working | **Adapt** — becomes input to "Impacted" count |
-| Tier 2 ML calibration (XGBoost) | R²=-0.308 | **Drop** — not needed in new approach |
-| Tier 3 EVT uncertainty | Working | **Drop** — ARC has own planning multipliers |
-| Ground Truth comparison | 56 rows | **Reframe** — validate L/M/H against historical events |
-| LOEO-CV validation | Working | **Drop** — no ML model to validate |
+| Component | Status | Outcome |
+|-----------|--------|---------|
+| DuckDB spatial filter (replaced Athena) | Working | **Reused** — raster bbox filtering |
+| FAST building predictions | Local Parquet | **Reused** — primary data source |
+| Census population | Downloaded | **Reused** — same data |
+| Colab notebook framework | Working | **Reused** — restructured for BHI pipeline |
+| Excel config interface | Working | **Reused** — now reads storm params + thresholds |
+| Tier 2 ML calibration (XGBoost) | R²=-0.308 | **Dropped** — deterministic approach chosen |
+| Tier 3 EVT uncertainty | Working | **Dropped** — ARC has own planning multipliers |
+| Ground Truth comparison | 56 rows | **Reframed** — validates L/M/H against historical events |
 
 ---
 
