@@ -35,3 +35,4 @@ venv/
 
 # Notebook backups
 *.backup.ipynb
+docs/manual/SCREENSHOT_CHECKLIST.md
