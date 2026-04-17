@@ -83,6 +83,17 @@ class NSIDownloader:
     def __init__(self, work_dir: Path | str):
         self.work_dir = Path(work_dir)
 
+    def _normalize_state_names(self, state_names: list) -> list[str]:
+        """Normalize, deduplicate, and preserve user-specified state ordering."""
+        normalized_states = []
+        seen_states = set()
+        for state_name in state_names:
+            normalized = self._normalize_state_name(state_name)
+            if normalized and normalized not in seen_states:
+                seen_states.add(normalized)
+                normalized_states.append(normalized)
+        return normalized_states
+
     @classmethod
     def _normalize_state_name(cls, state_name: str) -> str | None:
         """Return canonical state name (title-case) or None if not found."""
@@ -108,7 +119,12 @@ class NSIDownloader:
         df["cbfips"] = cb
         return df
 
-    def stream_features(self, url: str, timeout: int = 600, retries: int = 3) -> tuple[list[dict], int]:
+    def stream_features(
+        self,
+        url: str,
+        timeout: int = 600,
+        retries: int = 3,
+    ) -> tuple[list[dict], int]:
         """Download NSI features using fmt=fs (feature stream) with line-by-line JSON parsing."""
         rows = []
         for attempt in range(retries):
@@ -159,7 +175,8 @@ class NSIDownloader:
     def download_state(self, state_name: str, raster_bbox_polygon=None) -> tuple[pd.DataFrame, int]:
         """Download NSI for one state. Large states use county-by-county download.
 
-        Returns (dataframe, bytes_downloaded) where bytes_downloaded is HTTP payload bytes (0 if cached).
+        Returns (dataframe, bytes_downloaded) where bytes_downloaded is HTTP
+        payload bytes (0 if cached).
         """
         normalized_state = self._normalize_state_name(state_name)
         if not normalized_state:
@@ -176,18 +193,26 @@ class NSIDownloader:
         if use_cache and fips in self.LARGE_STATE_FIPS:
             if not cache_meta_path.exists():
                 print(
-                    f"  {normalized_state}: ignoring legacy large-state cache without completeness metadata ({cache_path.name})"
+                    "  "
+                    f"{normalized_state}: ignoring legacy large-state cache "
+                    f"without completeness metadata ({cache_path.name})"
                 )
                 use_cache = False
             else:
                 try:
                     cache_meta = json.loads(cache_meta_path.read_text())
                 except (OSError, json.JSONDecodeError) as e:
-                    print(f"  {normalized_state}: ignoring unreadable cache metadata {cache_meta_path.name}: {e}")
+                    print(
+                        f"  {normalized_state}: ignoring unreadable cache metadata "
+                        f"{cache_meta_path.name}: {e}"
+                    )
                     use_cache = False
                 else:
                     if not cache_meta.get("complete", False):
-                        print(f"  {normalized_state}: ignoring incomplete large-state cache {cache_path.name}")
+                        print(
+                            f"  {normalized_state}: ignoring incomplete "
+                            f"large-state cache {cache_path.name}"
+                        )
                         use_cache = False
         if use_cache:
             print(f"  {normalized_state}: loading cached {cache_path.name}")
@@ -198,12 +223,19 @@ class NSIDownloader:
         bytes_downloaded = 0
         if fips in self.LARGE_STATE_FIPS:
             county_fips_list, counties_gdf = self.county_fips(fips)
-            print(f"  {normalized_state} (FIPS={fips}): downloading {len(county_fips_list)} counties...")
+            print(
+                f"  {normalized_state} (FIPS={fips}): downloading "
+                f"{len(county_fips_list)} counties..."
+            )
             all_rows = []
             t0 = time.time()
             total_bytes = 0
 
-            with tqdm(total=len(county_fips_list), desc=f"{normalized_state} counties", unit="county") as pbar:
+            with tqdm(
+                total=len(county_fips_list),
+                desc=f"{normalized_state} counties",
+                unit="county",
+            ) as pbar:
                 for cfips in county_fips_list:
                     url = f"{self.API_BASE}?fips={cfips}&fmt=fs"
                     try:
@@ -226,23 +258,29 @@ class NSIDownloader:
                 if not intersecting.empty:
                     names = intersecting["GEOID"].tolist()
                     raise RuntimeError(
-                        f"{normalized_state}: {len(intersecting)} failed counties intersect raster footprint: {names}. "
+                        f"{normalized_state}: {len(intersecting)} failed counties "
+                        f"intersect raster footprint: {names}. "
                         f"Cannot produce reliable results."
                     )
                 else:
                     warnings.warn(
-                        f"{normalized_state}: {len(failed_counties)} counties failed but none intersect raster — continuing"
+                        f"{normalized_state}: {len(failed_counties)} counties "
+                        "failed but none intersect raster — continuing"
                     )
             elif failed_counties:
                 warnings.warn(
-                    f"{normalized_state}: {len(failed_counties)} counties failed (no raster bbox to check): "
+                    f"{normalized_state}: {len(failed_counties)} counties "
+                    "(no raster bbox to check): "
                     f"{[c[0] for c in failed_counties]}"
                 )
             if failed_counties:
                 should_cache = False
 
             if not all_rows:
-                raise RuntimeError(f"{normalized_state}: all county downloads failed, 0 buildings retrieved")
+                raise RuntimeError(
+                    f"{normalized_state}: all county downloads failed, "
+                    "0 buildings retrieved"
+                )
 
             df = pd.DataFrame(all_rows)
             bytes_downloaded = total_bytes
@@ -269,18 +307,15 @@ class NSIDownloader:
             for stale_path in (cache_path, cache_meta_path):
                 if stale_path.exists():
                     stale_path.unlink()
-            print(f"    Skipping cache for {state_name} because {len(failed_counties)} counties failed during download")
+            print(
+                f"    Skipping cache for {state_name} because "
+                f"{len(failed_counties)} counties failed during download"
+            )
         return df, bytes_downloaded
 
     def download_states(self, state_names: list, raster_bbox_polygon=None) -> pd.DataFrame:
         """Download NSI for multiple states, show tqdm on states, return concatenated buildings."""
-        normalized_states = []
-        seen_states = set()
-        for s in state_names:
-            normalized = self._normalize_state_name(s)
-            if normalized and normalized not in seen_states:
-                seen_states.add(normalized)
-                normalized_states.append(normalized)
+        normalized_states = self._normalize_state_names(state_names)
 
         if not normalized_states:
             raise RuntimeError("No valid states to download after normalization.")
@@ -291,7 +326,11 @@ class NSIDownloader:
         t_dl0 = time.time()
         total_dl_bytes = 0
 
-        with tqdm(total=len(normalized_states), desc="Downloading NSI states", unit="state") as pbar:
+        with tqdm(
+            total=len(normalized_states),
+            desc="Downloading NSI states",
+            unit="state",
+        ) as pbar:
             for state in normalized_states:
                 try:
                     df, nbytes = self.download_state(state, raster_bbox_polygon=raster_bbox_polygon)
@@ -308,7 +347,10 @@ class NSIDownloader:
                     pbar.update(1)
 
         if failed_states:
-            warnings.warn(f"NSI download failed for {len(failed_states)} states: {[s for s, _ in failed_states]}")
+            warnings.warn(
+                f"NSI download failed for {len(failed_states)} states: "
+                f"{[s for s, _ in failed_states]}"
+            )
 
         if not nsi_dfs:
             raise RuntimeError("No NSI data downloaded. Cannot proceed.")
@@ -329,6 +371,111 @@ class NSIDownloader:
         """
         return state_name.strip().replace(" ", "_").title()
 
+    def _resolve_hf_partition_files(
+        self,
+        state_names: list,
+        repo_id: str,
+        token: str | None,
+    ) -> tuple[list[str], list[str]]:
+        """Return matched state names plus parquet paths within the HF dataset repo."""
+        from huggingface_hub import HfApi
+
+        normalized_states = self._normalize_state_names(state_names)
+        if not normalized_states:
+            raise RuntimeError("No valid states to download after normalization.")
+
+        api = HfApi()
+        repo_files = api.list_repo_files(repo_id, repo_type="dataset", token=token)
+        parquet_files = [file_name for file_name in repo_files if file_name.endswith(".parquet")]
+        if not parquet_files:
+            raise FileNotFoundError(f"No parquet files in HF dataset {repo_id}")
+
+        available: dict[str, list[str]] = {}
+        for parquet_file in parquet_files:
+            parts = parquet_file.split("/")
+            if parts[0].startswith("state="):
+                key = parts[0].split("=", 1)[1].lower()
+                available.setdefault(key, []).append(parquet_file)
+
+        files_to_download: list[str] = []
+        matched_states: list[str] = []
+        for state_name in normalized_states:
+            key = self._hf_partition_key(state_name).lower()
+            if key in available:
+                files_to_download.extend(available[key])
+                matched_states.append(state_name)
+            else:
+                warnings.warn(
+                    f"No HF partition for {state_name!r} "
+                    f"(tried key={key!r}), skipping"
+                )
+
+        if not files_to_download:
+            raise FileNotFoundError(
+                f"No HF partitions matched for states "
+                f"{state_names}. Available partitions: "
+                f"{sorted(available.keys())}"
+            )
+        return matched_states, files_to_download
+
+    def download_states_hf_paths(
+        self,
+        state_names: list,
+        repo_id: str = "Alexq847182/NSI_Parquet",
+        token: str | None = None,
+    ) -> list[Path]:
+        """Download or reuse cached HF parquet partitions and return their local paths."""
+        from huggingface_hub import hf_hub_download
+
+        matched_states, files_to_download = self._resolve_hf_partition_files(
+            state_names=state_names,
+            repo_id=repo_id,
+            token=token,
+        )
+
+        print(
+            f"Downloading {len(files_to_download)} file(s) for "
+            f"{len(matched_states)} state(s): {matched_states}"
+        )
+
+        hf_cache_dir = self.work_dir / "hf_nsi_cache"
+        hf_cache_dir.mkdir(parents=True, exist_ok=True)
+
+        local_paths: list[Path] = []
+        t0 = time.time()
+        total_bytes = 0
+
+        with tqdm(
+            total=len(files_to_download),
+            desc="Downloading NSI from HuggingFace",
+            unit="file",
+        ) as pbar:
+            for parquet_file in files_to_download:
+                local_path = Path(
+                    hf_hub_download(
+                        repo_id=repo_id,
+                        filename=parquet_file,
+                        repo_type="dataset",
+                        token=token,
+                        cache_dir=str(hf_cache_dir),
+                    )
+                )
+                total_bytes += local_path.stat().st_size
+                local_paths.append(local_path)
+
+                elapsed = max(time.time() - t0, 1e-9)
+                mb_s = total_bytes / elapsed / 1024 / 1024
+                pbar.set_postfix_str(f"{mb_s:.2f} MB/s")
+                pbar.update(1)
+
+        unique_local_paths = list(dict.fromkeys(local_paths))
+        if not unique_local_paths:
+            raise RuntimeError(
+                f"No NSI parquet files found for states "
+                f"{matched_states} in HF dataset {repo_id}"
+            )
+        return unique_local_paths
+
     def download_states_hf(
         self,
         state_names: list,
@@ -342,117 +489,32 @@ class NSIDownloader:
         for the requested ``state_names`` are downloaded — no full
         dataset download is needed.
         """
-        from huggingface_hub import HfApi, hf_hub_download
-
         keep_cols = self.KEEP_COLS + ["longitude", "latitude"]
-
-        normalized_states = []
-        seen_states = set()
-        for s in state_names:
-            normalized = self._normalize_state_name(s)
-            if normalized and normalized not in seen_states:
-                seen_states.add(normalized)
-                normalized_states.append(normalized)
-
-        if not normalized_states:
-            raise RuntimeError("No valid states to download after normalization.")
-
-        # Build mapping: HF partition key → state name
-        api = HfApi()
-        repo_files = api.list_repo_files(
-            repo_id, repo_type="dataset", token=token
-        )
-        parquet_files = [
-            f for f in repo_files if f.endswith(".parquet")
-        ]
-        if not parquet_files:
-            raise FileNotFoundError(
-                f"No parquet files in HF dataset {repo_id}"
-            )
-
-        # Index available partitions (lower-case key → filename)
-        available: dict[str, list[str]] = {}
-        for pf in parquet_files:
-            # e.g. "state=Florida/part-00000.snappy.parquet"
-            parts = pf.split("/")
-            if parts[0].startswith("state="):
-                key = parts[0].split("=", 1)[1].lower()
-                available.setdefault(key, []).append(pf)
-
-        # Match requested states to partitions
-        files_to_download: list[str] = []
-        matched_states: list[str] = []
-        for s in normalized_states:
-            key = self._hf_partition_key(s).lower()
-            if key in available:
-                files_to_download.extend(available[key])
-                matched_states.append(s)
-            else:
-                warnings.warn(
-                    f"No HF partition for {s!r} "
-                    f"(tried key={key!r}), skipping"
-                )
-
-        if not files_to_download:
-            raise FileNotFoundError(
-                f"No HF partitions matched for states "
-                f"{state_names}. Available partitions: "
-                f"{sorted(available.keys())}"
-            )
-
-        print(
-            f"Downloading {len(files_to_download)} file(s) for "
-            f"{len(matched_states)} state(s): {matched_states}"
-        )
-
-        hf_cache_dir = self.work_dir / "hf_nsi_cache"
-        hf_cache_dir.mkdir(parents=True, exist_ok=True)
-
         nsi_dfs: list[pd.DataFrame] = []
-        t0 = time.time()
-        total_bytes = 0
 
-        with tqdm(
-            total=len(files_to_download),
-            desc="Downloading NSI from HuggingFace",
-            unit="file",
-        ) as pbar:
-            for pf in files_to_download:
-                local_path = hf_hub_download(
-                    repo_id=repo_id,
-                    filename=pf,
-                    repo_type="dataset",
-                    token=token,
-                    cache_dir=str(hf_cache_dir),
+        normalized_states = self._normalize_state_names(state_names)
+        local_paths = self.download_states_hf_paths(
+            state_names=state_names,
+            repo_id=repo_id,
+            token=token,
+        )
+
+        for local_path in local_paths:
+            df_part = pd.read_parquet(local_path)
+
+            missing = self.REQUIRED_HF_COLS - set(df_part.columns)
+            if missing:
+                raise ValueError(
+                    f"HF parquet {local_path.name!r} missing required "
+                    f"columns: {sorted(missing)}. "
+                    f"Available: {sorted(df_part.columns)}"
                 )
-                file_bytes = Path(local_path).stat().st_size
-                total_bytes += file_bytes
 
-                df_part = pd.read_parquet(local_path)
+            available_cols = [column for column in keep_cols if column in df_part.columns]
+            df_part = df_part[available_cols]
 
-                # Fail fast if required columns are missing
-                missing = self.REQUIRED_HF_COLS - set(
-                    df_part.columns
-                )
-                if missing:
-                    raise ValueError(
-                        f"HF parquet {pf!r} missing required "
-                        f"columns: {sorted(missing)}. "
-                        f"Available: {sorted(df_part.columns)}"
-                    )
-
-                available_cols = [
-                    c for c in keep_cols if c in df_part.columns
-                ]
-                df_part = df_part[available_cols]
-
-                if not df_part.empty:
-                    nsi_dfs.append(df_part)
-
-                elapsed = max(time.time() - t0, 1e-9)
-                mb_s = total_bytes / elapsed / 1024 / 1024
-                pbar.set_postfix_str(f"{mb_s:.2f} MB/s")
-                pbar.update(1)
+            if not df_part.empty:
+                nsi_dfs.append(df_part)
 
         if not nsi_dfs:
             raise RuntimeError(
