@@ -10,6 +10,8 @@ from urllib.parse import urljoin
 
 import geopandas as gpd
 import requests
+import rasterio
+import numpy as np
 from rasterio.io import MemoryFile
 from requests.adapters import HTTPAdapter
 from shapely.geometry import box
@@ -268,6 +270,34 @@ def import_surge_data(
     }
 
 
+def remap_surge_categories(input_path: str, output_path: str, category_map: dict):
+    """
+    Replace categorical storm surge codes with surge heights in feet.
+
+    Args:
+        input_path:   Path to the input GeoTIFF with categorical codes
+        output_path:  Path to write the remapped GeoTIFF
+        category_map: Dict mapping category code (int) -> surge height (float)
+    """
+    with rasterio.open(input_path) as src:
+        data = src.read(1)
+        profile = src.profile
+        nodata = src.nodata
+
+    remapped = np.full(data.shape, nodata if nodata is not None else -9999, dtype=np.float32)
+
+    for code, height_ft in category_map.items():
+        remapped[data == code] = height_ft
+
+    profile.update(dtype=rasterio.float32, nodata=remapped.fill_value if hasattr(remapped, 'fill_value') else nodata)
+
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(remapped, 1)
+
+    return remapped
+
+
+
 def download_surge_raster(
     storm_id: str,
     storm_name: str,
@@ -294,6 +324,16 @@ def download_surge_raster(
     raster_path = output_dir / result["tif_name"]
     raster_path.write_bytes(result["tif_bytes"])
     result["data"].close()
+    category_map = {
+    1:  1.0,
+    2:  1.0,
+    3:  3.0,
+    4:  6.0,
+    5:  9.0,
+    }   
+    remap_surge_categories(input_path = str(raster_path), 
+                           output_path = str(raster_path), 
+                           category_map = category_map)
     return str(raster_path), result["states"]
 
 

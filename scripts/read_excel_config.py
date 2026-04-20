@@ -11,51 +11,36 @@ def get_default_params():
     """Return the hardcoded baseline configuration (fallbacks)."""
     return {
         # ── Storm inputs ──────────────────────────────────────────
-        "storm_id": "AL022024",
-        "storm_name": "BERYL",
-        "advisory": 29,
-        "year": 2024,
+        "storm_id": "",
+        "storm_name": "",
+        "advisory":00,
+        "year": 0000,
         # ── FAST engine ───────────────────────────────────────────
         "flood_load_condition": "CoastalA",  # CoastalA | CoastalV | Riverine
         "fast_timeout": 1800,  # FAST subprocess timeout (seconds)
-        # ── Damage classification (Hazus standard defaults) ──────
-        "DAMAGE_STATE_THRESHOLDS": {
-            "Slight": (0, 15),
-            "Moderate": (15, 40),
-            "Extensive": (40, 60),
-            "Complete": (60, 100),
+        # ── Residential building types ────────────────────────────
+        "BUILDING_TYPES" : {
+            "RES1"  : "",
+            "RES2"  : "",
+            "RES3A" : "",
+            "RES3B" : "",
+            "RES3C" : "",
+            "RES3D" : "",
+            "RES3E" : "",
+            "RES3F" : "",
+            "RES4"  : "",
+            "RES5"  : "",
+            "RES6"  : ""
         },
-        # ── Tract severity (ARC Figure 10 thresholds) ────────────
-        "TRACT_SEVERITY": {
-            "high": {"pct_destroyed": 0.35, "pct_major_damage": 0.35},
-            "medium": {"pct_destroyed": 0.11, "pct_major_damage": 0.16},
+        # ── Damage assessment categories ──────────────────────────
+        "DAMAGE_CATEGORIES" : {
+            ">9" : "",
+            ">6" : "",
+            ">3" : "",
+            ">1" : ""
         },
-        "DAMAGE_SEVERITY": {
-            "high": {"pct_destroyed": 0.35, "pct_major_damage": 0.35},
-            "medium": {"pct_destroyed": 0.11, "pct_major_damage": 0.16},
-        },
-        # ── Building Habitability Index (BHI) ────────────────────
-        "BLDNG_USABILITY": {
-            "Slight": {"FU": 1.00, "PU": 0.00, "NU": 0.00},
-            "Moderate": {"FU": 0.87, "PU": 0.13, "NU": 0.00},
-            "Extensive": {"FU": 0.25, "PU": 0.50, "NU": 0.25},
-            "Complete": {"FU": 0.00, "PU": 0.02, "NU": 0.98},
-        },
-        # ── Utility Loss Severity — [low, high] ranges ───────────
-        "UL_SEVERITY": {
-            "low": {"FU": [0.00, 0.05], "PU": [0.05, 0.10]},
-            "medium": {"FU": [0.00, 0.10], "PU": [0.30, 0.50]},
-            "high": {"FU": [0.10, 0.30], "PU": [0.60, 0.80]},
-        },
-        # ── SVI configuration ────────────────────────────────────
-        "SVI_SHELTER_RATES": [0.000, 0.025, 0.050],
-        "SVI_BINS": [0.4, 0.8],  # bin edges for low/med/high SVI
-        "PERCENT_IMPACT": {
-            "high": 5.0,
-            "medium": 2.5,
-            "low": 0.0,
-        },
-        "geography": "census tract",
+        # ── Geography ─────────────────────────────────────────────
+        "geography": "county",
         # ── Network / performance ────────────────────────────────
         "download_timeout": 60,  # raster + census API timeout (s)
         "svi_timeout": 300,  # CDC SVI download timeout (s)
@@ -103,7 +88,7 @@ def _warn_default(message: str) -> None:
     warnings.warn(message, UserWarning, stacklevel=2)
 
 
-def _read_optional_storm_inputs(df: pd.DataFrame) -> dict[str, object]:
+def _read_storm_inputs(df: pd.DataFrame) -> dict[str, object]:
     extracted: dict[str, object] = {}
 
     value = nan_to_none(df.iloc[5, 2])
@@ -125,65 +110,59 @@ def _read_optional_storm_inputs(df: pd.DataFrame) -> dict[str, object]:
     return extracted
 
 
-def _extract_severity_override(pct_destroyed, pct_major_damage) -> dict[str, float]:
-    override: dict[str, float] = {}
-    if pct_destroyed is not None:
-        override["pct_destroyed"] = pct_destroyed
-    if pct_major_damage is not None:
-        override["pct_major_damage"] = pct_major_damage
-    return override
 
 
-def _read_optional_damage_severity(df: pd.DataFrame) -> dict[str, dict[str, dict[str, float]]]:
+
+def _read_optional_building_type(df: pd.DataFrame) -> dict[str, dict[str, str]]:
     try:
-        severity_overrides: dict[str, dict[str, float]] = {}
+        building_types: dict[str, str] = {}
 
-        high_override = _extract_severity_override(
-            parse_range_pct(df.iloc[12, 2]),
-            parse_range_pct(df.iloc[12, 4]),
-        )
-        if high_override:
-            severity_overrides["high"] = high_override
-
-        medium_override = _extract_severity_override(
-            parse_range_pct(df.iloc[13, 2]),
-            parse_range_pct(df.iloc[13, 4]),
-        )
-        if medium_override:
-            severity_overrides["medium"] = medium_override
+        res_types = ["1", "2", "3A", "3B", "3C", "3D", "3E", "3F", "4", "5", "6"]
+        idx = list(range(12, 23))
+        for res, ix in zip(res_types, idx):
+            ind = df.iloc[ix, 2]
+            if ind is not None:
+                building_types["RES" + str(res)] = str(ind)
+    
     except IndexError:
-        return {}
-
-    if not severity_overrides:
         return {}
 
     return {
-        "TRACT_SEVERITY": {
-            level: values.copy() for level, values in severity_overrides.items()
-        },
-        "DAMAGE_SEVERITY": {
-            level: values.copy() for level, values in severity_overrides.items()
-        },
+        "BUILDING_TYPES": {
+            res: ind for res, ind in building_types.items()
+        }
     }
 
 
-def _read_optional_svi_rates(df: pd.DataFrame) -> dict[str, list[float]]:
+def _read_optional_damage_categories(df: pd.DataFrame) -> dict[str, dict[str, str]]:
     try:
-        raw_values = [
-            nan_to_none(df.iloc[17, 3]),
-            nan_to_none(df.iloc[18, 3]),
-            nan_to_none(df.iloc[19, 3]),
-        ]
+        damage_categories: dict[str, str] = {}
+
+        ht_vals = [">9", ">6", ">3", ">1"]
+        idx = list(range(26, 30))
+        for ht, ix in zip(ht_vals, idx):
+            cat = df.iloc[ix, 2]
+            if cat is not None:
+                damage_categories[str(ht)] = str(cat)
+    
     except IndexError:
         return {}
 
-    if all(value is None for value in raw_values):
-        return {}
+    return {
+        "DAMAGE_CATEGORIES": {
+            val: cat for val, cat in damage_categories.items()
+        }
+    }
 
-    if any(value is None for value in raw_values):
-        return {}
 
-    return {"SVI_SHELTER_RATES": [float(value) for value in raw_values]}
+def _read_geography(df: pd.DataFrame) -> dict[str, object]:
+    extracted: dict[str, object] = {}
+
+    value = nan_to_none(df.iloc[32, 2])
+    if value is not None:
+        extracted["geography"] = str(value)
+
+    return extracted
 
 
 def load_config_from_excel(xlsx_path):
@@ -206,9 +185,10 @@ def load_config_from_excel(xlsx_path):
         return params
 
     extracted: dict[str, object] = {}
-    extracted.update(_read_optional_storm_inputs(df))
-    extracted.update(_read_optional_damage_severity(df))
-    extracted.update(_read_optional_svi_rates(df))
+    extracted.update(_read_storm_inputs(df))
+    extracted.update(_read_optional_building_type(df))
+    extracted.update(_read_optional_damage_categories(df))
+    extracted.update(_read_geography(df))
 
     return deep_update(params, extracted)
 
