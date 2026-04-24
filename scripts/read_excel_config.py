@@ -93,11 +93,11 @@ def _read_storm_inputs(df: pd.DataFrame) -> dict[str, object]:
 
     value = nan_to_none(df.iloc[5, 2])
     if value is not None:
-        extracted["storm_id"] = str(value)
+        extracted["storm_id"] = str(value).upper()
 
     value = nan_to_none(df.iloc[6, 2])
     if value is not None:
-        extracted["storm_name"] = str(value)
+        extracted["storm_name"] = str(value).upper()
 
     value = nan_to_none(df.iloc[7, 2])
     if value is not None:
@@ -122,7 +122,7 @@ def _read_optional_building_type(df: pd.DataFrame) -> dict[str, dict[str, str]]:
         for res, ix in zip(res_types, idx):
             ind = df.iloc[ix, 2]
             if ind is not None:
-                building_types["RES" + str(res)] = str(ind)
+                building_types["RES" + str(res)] = str(ind).upper()
     
     except IndexError:
         return {}
@@ -143,7 +143,7 @@ def _read_optional_damage_categories(df: pd.DataFrame) -> dict[str, dict[str, st
         for ht, ix in zip(ht_vals, idx):
             cat = df.iloc[ix, 2]
             if cat is not None:
-                damage_categories[str(ht)] = str(cat)
+                damage_categories[str(ht)] = str(cat).upper()
     
     except IndexError:
         return {}
@@ -160,7 +160,7 @@ def _read_geography(df: pd.DataFrame) -> dict[str, object]:
 
     value = nan_to_none(df.iloc[32, 2])
     if value is not None:
-        extracted["geography"] = str(value)
+        extracted["geography"] = str(value).upper()
 
     return extracted
 
