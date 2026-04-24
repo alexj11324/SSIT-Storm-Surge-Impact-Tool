@@ -9,11 +9,9 @@ Stage 1-2: Damage Prediction
   NSI Parquet --> DuckDB: clean/filter/dedup/map --> FAST CSV -+
   NHC P-Surge GeoTIFF (.tif) --------------------------------+-> FAST engine -> predictions.csv
 
-Stage 3-4: Shelter Demand (Colab: notebooks/shelter_demand.ipynb)
+Stage 3-5: Shelter Demand + Export (Colab: notebooks/shelter_demand.ipynb)
   predictions.csv --> L/M/H classification (tract level) --> BHI × Census × SVI --> shelter demand
-
-Stage 5: Validation
-  shelter demand estimates vs ARC ground truth (9 hurricanes 2018-2024) --> RMSE, MAE, R²
+  shelter demand --> CSV/XLSX deliverables
 ```
 
 See `docs/e2e_pipeline.md` for the full Mermaid diagram.
@@ -30,18 +28,16 @@ pip install -e '.[dev]'
 ## Quick Start
 
 ```bash
-# Run the primary pipeline (DuckDB SQL → FAST CSV)
+# Shelter demand pipeline (Google Colab)
+# Open notebooks/shelter_demand.ipynb in Colab — the primary ARC deliverable.
+# The notebook reads the Excel interface, downloads the NHC raster, infers
+# affected states, loads NSI, runs FAST, and exports CSV/XLSX deliverables.
+
+# Optional local FAST-input build only (DuckDB SQL → FAST CSV)
 python scripts/duckdb_fast_pipeline.py \
   --parquet-glob "nsi/state=FL/*.parquet" \
   --raster FAST-main/rasters/IAN_2022_adv33_e10_ResultMaskRaster.tif \
   --output outputs/fast_input.csv
-
-# Validate pipeline output
-python scripts/validate_pipeline.py path/to/output.csv
-
-# Shelter demand pipeline (Google Colab)
-# Open notebooks/shelter_demand.ipynb in Colab — the primary ARC deliverable
-# See docs/e2e_pipeline.md for the full 5-stage pipeline
 ```
 
 ## Command Reference
@@ -53,9 +49,7 @@ python scripts/validate_pipeline.py path/to/output.csv
 | `download_nsi_by_state.py` | Download NSI from USACE API | `--state` (repeatable), `--output-dir`, `--engine {duckdb,geopandas}` |
 | `nsi_downloader.py` | NSI download client (USACE API + HuggingFace) | Used as library by notebook and other scripts |
 | `nsi_raw_to_parquet.py` | Convert raw NSI to Parquet | `--input`, `--output`, `--engine {duckdb,geopandas}` |
-| `import_nhc_by_storm.py` | Download NHC P-Surge rasters | Edit storm params in script, then run |
-| `validate_pipeline.py` | Validate FAST output CSV | positional `predictions_csv`, `--output-json` |
-| `h3_spatial_index.py` | H3 hex spatial pre-filter | `--raster`, `--parquet` (repeatable), `--resolution` |
+| `import_nhc_by_storm.py` | Download NHC P-Surge rasters and infer affected states | Used by notebook: `download_surge_raster(storm_id, storm_name, advisory, year)` |
 | `upload_nsi_to_hf.py` | Upload NSI to Hugging Face | `--repo-id`, `--parquet-dir`, `--download-all` |
 | `read_excel_config.py` | Load config from Excel interface | Used as library: `load_config_from_excel(path)` |
 | `us_states.py` | State FIPS, abbreviations, API URLs | Used as library: `from scripts.us_states import STATE_BY_ABBR` |
@@ -69,8 +63,6 @@ scripts/
   nsi_downloader.py             # NSI download client (USACE API + HuggingFace)
   nsi_raw_to_parquet.py         # Raw NSI GPKG/GeoJSON -> Parquet
   import_nhc_by_storm.py        # Download NHC P-Surge rasters
-  h3_spatial_index.py           # H3 hex spatial pre-filtering
-  validate_pipeline.py          # Post-run validation: schema + stats
   upload_nsi_to_hf.py           # Upload NSI Parquet to Hugging Face Hub
   read_excel_config.py          # Excel config loader (Interface sheet)
   us_states.py                  # State metadata: FIPS, abbreviations, API URLs
@@ -83,11 +75,9 @@ tests/
   test_shelter_demand_notebook.py # Notebook validation tests
 notebooks/
   shelter_demand.ipynb          # BHI shelter demand E2E pipeline (Colab) — primary ARC deliverable
-configs/
-  event_state_map.yaml          # Hurricane -> affected states + raster patterns (11 events)
 data/
   ARC Storm Surge Shelter Demand.xlsx  # Excel config interface (storm params, thresholds, BHI)
-  Ground Truth Data.xlsx               # ARC ground truth for validation (9 hurricanes)
+  Ground Truth Data.xlsx               # Historical ARC records used for reference/calibration
 docs/
   e2e_pipeline.md               # End-to-end pipeline architecture (Mermaid)
   DIRECTION.md                  # ML→L/M/H pivot rationale and ARC methodology
@@ -106,7 +96,7 @@ FAST-main/
 
 | Source | Description | Format |
 |--------|-------------|--------|
-| NSI | USACE National Structure Inventory 2022 (30M+ buildings) | Parquet, partitioned by state |
+| NSI | USACE National Structure Inventory 2022 (30M+ buildings); notebook defaults to preprocessed HuggingFace Parquet with USACE API fallback | Parquet, partitioned by state |
 | NHC P-Surge | NOAA storm surge inundation depth rasters | GeoTIFF (depth in feet) |
 | Census ACS | Population by census tract | API (data.census.gov) |
 | SVI | CDC Social Vulnerability Index | Census tract level |

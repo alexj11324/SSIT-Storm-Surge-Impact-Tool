@@ -12,7 +12,7 @@ To achieve rapid iteration and avoid classic GIS latency traps of large SQL JOIN
 
 ## 3. High-Level Data Flow
 1. **Raster Acquisition**: NHC P-Surge GeoTIFF rasters are downloaded via `scripts/import_nhc_by_storm.py`.
-2. **NSI Download**: Building inventory downloaded via `scripts/download_nsi_by_state.py` from USACE API.
+2. **NSI Loading**: Building inventory is loaded in the notebook via `scripts/nsi_downloader.py`, using HuggingFace preprocessed Parquet when available and the USACE API fallback when needed.
 3. **Intersection**: `scripts/duckdb_fast_pipeline.py` leverages DuckDB to spatially filter NSI buildings within the raster bbox and map columns to FAST schema.
 4. **Damage Scoring**: Matched buildings are sent through `FAST-main/Python_env/run_fast.py` to yield damage percentages.
 5. **Shelter Demand**: `notebooks/shelter_demand.ipynb` classifies damage states, computes BHI factors, joins Census/SVI data, and estimates shelter-seeking population.

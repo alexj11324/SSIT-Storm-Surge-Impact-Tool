@@ -11,7 +11,9 @@ from shapely.geometry import box
 from scripts import import_nhc_by_storm as nhc
 
 
-def _make_zip_bytes(storm_name: str, year: int, adv: int, tif_bytes: bytes = b"fake-geotiff-bytes") -> bytes:
+def _make_zip_bytes(
+    storm_name: str, year: int, adv: int, tif_bytes: bytes = b"fake-geotiff-bytes"
+) -> bytes:
     filename = f"{storm_name}_{year}_adv{adv}_e10_ResultMaskRaster.tif"
 
     buffer = io.BytesIO()
@@ -21,7 +23,9 @@ def _make_zip_bytes(storm_name: str, year: int, adv: int, tif_bytes: bytes = b"f
 
 
 def _make_archive_html(*filenames: str) -> str:
-    return "\n".join(f'<a href="inundation/forecasts/{filename}">{filename}</a><br>' for filename in filenames)
+    return "\n".join(
+        f'<a href="inundation/forecasts/{filename}">{filename}</a><br>' for filename in filenames
+    )
 
 
 class _DummyResponse:
@@ -68,19 +72,24 @@ def test_importer_returns_states_and_readable_raster(mock_states, mock_sjoin):
     ]
 
     state_geom = box(-1, -1, 1, 1)
-    states_gdf = gpd.GeoDataFrame({"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326")
+    states_gdf = gpd.GeoDataFrame(
+        {"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326"
+    )
     mock_states.return_value = states_gdf
     mock_sjoin.return_value = states_gdf
 
     memory_file_patch, _ = _patch_memory_file()
     with memory_file_patch:
-        result = nhc.import_surge_data("AL022024", "beryl", 29, 2024, session=mock_session, timeout=5)
+        result = nhc.import_surge_data(
+            "AL022024", "beryl", 29, 2024, session=mock_session, timeout=5
+        )
 
     assert result["states"] == ["TestState"]
     data = result["data"].read(1)
     assert data.shape == (1, 1)
     called_urls = [
-        call.kwargs["url"] if "url" in call.kwargs else call.args[0] for call in mock_session.get.call_args_list
+        call.kwargs["url"] if "url" in call.kwargs else call.args[0]
+        for call in mock_session.get.call_args_list
     ]
     assert called_urls == [
         nhc.NHC_INUNDATION_INDEX_URL,
@@ -101,7 +110,9 @@ def test_importer_handles_no_overlapping_states(mock_states, mock_sjoin):
 
     geom = box(-1, -1, 1, 1)
     empty_gdf = gpd.GeoDataFrame({"NAME": [], "geometry": []}, geometry="geometry", crs="EPSG:4326")
-    mock_states.return_value = gpd.GeoDataFrame({"NAME": ["Other"], "geometry": [geom]}, crs="EPSG:4326")
+    mock_states.return_value = gpd.GeoDataFrame(
+        {"NAME": ["Other"], "geometry": [geom]}, crs="EPSG:4326"
+    )
     mock_sjoin.return_value = empty_gdf
 
     memory_file_patch, _ = _patch_memory_file()
@@ -130,16 +141,21 @@ def test_importer_falls_back_to_legacy_and_latest_urls(mock_states, mock_sjoin):
     ]
 
     state_geom = box(-1, -1, 1, 1)
-    states_gdf = gpd.GeoDataFrame({"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326")
+    states_gdf = gpd.GeoDataFrame(
+        {"NAME": ["TestState"], "geometry": [state_geom]}, crs="EPSG:4326"
+    )
     mock_states.return_value = states_gdf
     mock_sjoin.return_value = states_gdf
 
     memory_file_patch, _ = _patch_memory_file()
     with memory_file_patch:
-        result = nhc.import_surge_data("AL022024", "BERYL", 29, 2024, session=mock_session, timeout=5)
+        result = nhc.import_surge_data(
+            "AL022024", "BERYL", 29, 2024, session=mock_session, timeout=5
+        )
 
     called_urls = [
-        call.kwargs["url"] if "url" in call.kwargs else call.args[0] for call in mock_session.get.call_args_list
+        call.kwargs["url"] if "url" in call.kwargs else call.args[0]
+        for call in mock_session.get.call_args_list
     ]
     assert called_urls == [
         nhc.NHC_INUNDATION_INDEX_URL,
@@ -153,7 +169,10 @@ def test_importer_falls_back_to_legacy_and_latest_urls(mock_states, mock_sjoin):
 def test_download_surge_raster_writes_tif_and_returns_states():
     tif_bytes = b"saved-raster-bytes"
 
-    with patch("scripts.import_nhc_by_storm.import_surge_data") as mock_import:
+    with (
+        patch("scripts.import_nhc_by_storm.import_surge_data") as mock_import,
+        patch("scripts.import_nhc_by_storm.remap_surge_categories") as mock_remap,
+    ):
         mock_data = MagicMock()
         mock_data.close = MagicMock()
         mock_import.return_value = {
@@ -164,10 +183,13 @@ def test_download_surge_raster_writes_tif_and_returns_states():
         }
 
         temp_dir = Path(tempfile.mkdtemp(prefix="nhc_raster_write_"))
-        raster_path, states = nhc.download_surge_raster("AL022024", "BERYL", 29, 2024, output_dir=temp_dir)
+        raster_path, states = nhc.download_surge_raster(
+            "AL022024", "BERYL", 29, 2024, output_dir=temp_dir
+        )
 
         assert states == ["Florida"]
         assert Path(raster_path).exists()
         assert Path(raster_path).name == "BERYL_2024_adv29_e10_ResultMaskRaster.tif"
         assert Path(raster_path).read_bytes() == tif_bytes
         mock_data.close.assert_called_once()
+        mock_remap.assert_called_once()

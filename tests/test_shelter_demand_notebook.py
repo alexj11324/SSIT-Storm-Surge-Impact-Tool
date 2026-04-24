@@ -36,7 +36,7 @@ def _find_cell(code_cells: list[str], header: str) -> str:
             ],
         ),
         (
-            "# Cell 7: Load Predictions + Derive Census Tract GEOID",
+            "# Cell 7: Load Predictions + Derive Census GEOID",
             [
                 "_nsi_join = WORK_DIR / 'nsi_cbfips_join.csv'",
                 "pd.read_csv(_nsi_join, dtype={'fltyid': str, 'cbfips': str})",

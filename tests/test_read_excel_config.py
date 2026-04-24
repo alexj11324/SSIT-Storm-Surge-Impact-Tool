@@ -8,17 +8,20 @@ import pytest
 import scripts.read_excel_config as read_excel_config
 
 
-def test_load_config_reads_major_damage_from_column_e(
+def test_load_config_reads_current_interface_fields(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Regression: % Major Damage lives in column E on the Interface sheet."""
-    df = pd.DataFrame([[pd.NA] * 5 for _ in range(20)])
-    df.iloc[12, 2] = 0.35
-    df.iloc[12, 3] = 0.91
-    df.iloc[12, 4] = 0.12
-    df.iloc[13, 2] = "0.11 - 0.34"
-    df.iloc[13, 3] = "0.92 - 0.99"
-    df.iloc[13, 4] = "0.22 - 0.33"
+    """Read storm inputs, building filters, damage categories, and geography."""
+    df = pd.DataFrame([[pd.NA] * 5 for _ in range(33)])
+    df.iloc[5, 2] = "al142018"
+    df.iloc[6, 2] = "michael"
+    df.iloc[7, 2] = 20
+    df.iloc[8, 2] = 2018
+    df.iloc[12, 2] = "y"
+    df.iloc[13, 2] = "n"
+    df.iloc[26, 2] = "Destroyed"
+    df.iloc[27, 2] = "Major"
+    df.iloc[32, 2] = "census tract"
 
     config_path = tmp_path / "interface.xlsx"
     config_path.touch()
@@ -27,17 +30,22 @@ def test_load_config_reads_major_damage_from_column_e(
 
     params = read_excel_config.load_config_from_excel(config_path)
 
-    assert params["TRACT_SEVERITY"]["high"]["pct_major_damage"] == pytest.approx(0.12)
-    assert params["TRACT_SEVERITY"]["medium"]["pct_major_damage"] == pytest.approx(0.22)
-    assert params["DAMAGE_SEVERITY"]["high"]["pct_major_damage"] == pytest.approx(0.12)
-    assert params["DAMAGE_SEVERITY"]["medium"]["pct_major_damage"] == pytest.approx(0.22)
+    assert params["storm_id"] == "AL142018"
+    assert params["storm_name"] == "MICHAEL"
+    assert params["advisory"] == 20
+    assert params["year"] == 2018
+    assert params["BUILDING_TYPES"]["RES1"] == "Y"
+    assert params["BUILDING_TYPES"]["RES2"] == "N"
+    assert params["DAMAGE_CATEGORIES"][">9"] == "DESTROYED"
+    assert params["DAMAGE_CATEGORIES"][">6"] == "MAJOR"
+    assert params["geography"] == "CENSUS TRACT"
 
 
 def test_load_config_keeps_new_runtime_defaults_when_excel_omits_them(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Notebook runtime defaults should still exist after Excel overlay."""
-    df = pd.DataFrame([[pd.NA] * 5 for _ in range(20)])
+    df = pd.DataFrame([[pd.NA] * 5 for _ in range(33)])
     config_path = tmp_path / "interface.xlsx"
     config_path.touch()
 
@@ -45,20 +53,19 @@ def test_load_config_keeps_new_runtime_defaults_when_excel_omits_them(
 
     params = read_excel_config.load_config_from_excel(config_path)
 
-    assert params["geography"] == "census tract"
-    assert params["PERCENT_IMPACT"] == {
-        "high": pytest.approx(5.0),
-        "medium": pytest.approx(2.5),
-        "low": pytest.approx(0.0),
-    }
+    assert params["geography"] == "county"
+    assert params["flood_load_condition"] == "CoastalA"
+    assert params["BUILDING_TYPES"]["RES1"] == ""
+    assert params["DAMAGE_CATEGORIES"][">9"] == ""
+    assert params["output_csv_name"] == "shelter_demand_output.csv"
 
 
-def test_load_config_merges_partial_damage_severity_override(
+def test_load_config_merges_partial_building_type_override(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A single non-empty threshold cell should override only that field."""
-    df = pd.DataFrame([[pd.NA] * 5 for _ in range(20)])
-    df.iloc[12, 4] = 0.12
+    """A single non-empty building type cell should override only that field."""
+    df = pd.DataFrame([[pd.NA] * 5 for _ in range(33)])
+    df.iloc[12, 2] = "Y"
 
     config_path = tmp_path / "interface.xlsx"
     config_path.touch()
@@ -67,18 +74,15 @@ def test_load_config_merges_partial_damage_severity_override(
 
     params = read_excel_config.load_config_from_excel(config_path)
 
-    assert params["DAMAGE_SEVERITY"]["high"]["pct_destroyed"] == pytest.approx(0.35)
-    assert params["DAMAGE_SEVERITY"]["high"]["pct_major_damage"] == pytest.approx(0.12)
+    assert params["BUILDING_TYPES"]["RES1"] == "Y"
+    assert params["BUILDING_TYPES"]["RES2"] == ""
 
 
-def test_load_config_keeps_default_svi_rates_when_excel_values_are_incomplete(
+def test_load_config_handles_short_interface_sheet(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Incomplete SVI rows should not raise and should keep the default triplet."""
+    """Optional rows below the provided sheet should keep defaults."""
     df = pd.DataFrame([[pd.NA] * 5 for _ in range(20)])
-    df.iloc[17, 3] = 0.1
-    df.iloc[18, 3] = pd.NA
-    df.iloc[19, 3] = 0.3
 
     config_path = tmp_path / "interface.xlsx"
     config_path.touch()
@@ -87,7 +91,7 @@ def test_load_config_keeps_default_svi_rates_when_excel_values_are_incomplete(
 
     params = read_excel_config.load_config_from_excel(config_path)
 
-    assert params["SVI_SHELTER_RATES"] == pytest.approx([0.0, 0.025, 0.05])
+    assert params["geography"] == "county"
 
 
 def test_load_config_warns_for_missing_file(tmp_path: Path) -> None:
@@ -97,4 +101,4 @@ def test_load_config_warns_for_missing_file(tmp_path: Path) -> None:
     with pytest.warns(UserWarning, match="not found"):
         params = read_excel_config.load_config_from_excel(missing_path)
 
-    assert params["storm_id"] == "AL022024"
+    assert params["storm_id"] == ""

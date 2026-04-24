@@ -8,7 +8,7 @@ CMU Heinz MSPPM 2026 Capstone for American Red Cross. Property-level storm surge
 
 ## Architecture
 
-Five-stage pipeline: NHC raster + NSI inventory → FAST damage engine → damage classification → BHI shelter demand → validation. See `docs/e2e_pipeline.md` for full Mermaid diagram.
+Current pipeline: Excel storm parameters → NHC raster + NSI inventory → FAST damage engine → damage classification → BHI shelter demand → CSV/XLSX export. See `docs/e2e_pipeline.md` for full Mermaid diagram.
 
 Key module relationships:
 
@@ -47,7 +47,6 @@ Intensity thresholds and ARC planning factors are in README.md (canonical locati
 
 ## Configuration
 
-- `configs/event_state_map.yaml` — hurricane → affected states + raster patterns (11 events).
 - `data/ARC Storm Surge Shelter Demand.xlsx` — Excel config interface (storm params, thresholds, BHI ratios).
 - `pyproject.toml` — ruff (line-length 100, py310, select E/F/W/I), pytest testpaths, dependencies.
 - **Ruff discrepancy**: `pyproject.toml` sets line-length=100, but `.claude/settings.json` PostToolUse hook overrides with `--config 'line-length=120'`. The hook wins on Claude edits; manual/CI runs use 100.
@@ -56,4 +55,3 @@ Intensity thresholds and ARC planning factors are in README.md (canonical locati
 
 Use `pytest`. Test paths: `tests/` + `FAST-main/tests/` (configured in `pyproject.toml`).
 Shared fixtures in `tests/conftest.py` (provides `project_root` fixture).
-Pipeline validation: `scripts/validate_pipeline.py` (schema checks + aggregate stats).
