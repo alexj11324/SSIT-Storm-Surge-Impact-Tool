@@ -5,16 +5,18 @@ Property-level storm surge/tsunami impact modeling using FEMA's FAST tool, USACE
 ## Architecture
 
 ```
-Stage 1-2: Damage Prediction
+Stage 1-2: Damage Prediction (local / Colab)
   NSI Parquet --> DuckDB: clean/filter/dedup/map --> FAST CSV -+
   NHC P-Surge GeoTIFF (.tif) --------------------------------+-> FAST engine -> predictions.csv
 
-Stage 3-5: Shelter Demand + Export (Colab: notebooks/shelter_demand.ipynb)
+Stage 3-5: Shelter Demand + Export (Colab notebook, hosted externally)
   predictions.csv --> L/M/H classification (tract level) --> BHI × Census × SVI --> shelter demand
   shelter demand --> CSV/XLSX deliverables
 ```
 
-See `docs/e2e_pipeline.md` for the full Mermaid diagram.
+The shelter-demand Colab notebook and the Excel interface workbook are distributed
+out-of-tree (Google Drive / Colab); they are no longer tracked in git. See
+`docs/e2e_pipeline.md` for the full Mermaid diagram.
 
 ## Prerequisites
 
@@ -28,16 +30,26 @@ pip install -e '.[dev]'
 ## Quick Start
 
 ```bash
-# Shelter demand pipeline (Google Colab)
-# Open notebooks/shelter_demand.ipynb in Colab — the primary ARC deliverable.
-# The notebook reads the Excel interface, downloads the NHC raster, infers
-# affected states, loads NSI, runs FAST, and exports CSV/XLSX deliverables.
+# Shelter demand pipeline (Google Colab — primary ARC deliverable)
+# The Colab notebook + Excel interface workbook live in Google Drive (out-of-tree).
+# It reads the Excel interface, downloads the NHC raster, infers affected
+# states, loads NSI, runs FAST, and exports CSV/XLSX deliverables.
+# Default storm is HELENE_2024; override via the Excel interface sheet.
 
-# Optional local FAST-input build only (DuckDB SQL → FAST CSV)
+# Local FAST-input build (DuckDB SQL → FAST CSV)
 python scripts/duckdb_fast_pipeline.py \
   --parquet-glob "nsi/state=FL/*.parquet" \
-  --raster FAST-main/rasters/IAN_2022_adv33_e10_ResultMaskRaster.tif \
+  --raster FAST-main/rasters/HELENE_2024_adv15_e10_ResultMaskRaster.tif \
   --output outputs/fast_input.csv
+
+# Run FAST headless on the produced CSV
+# (--mapping-json is required; see Command Reference for the full signature)
+python FAST-main/Python_env/run_fast.py \
+  --inventory outputs/fast_input.csv \
+  --mapping-json '{"FltyId":"FltyId","Occ":"Occ","Cost":"Cost","Area":"Area","NumStories":"NumStories","FoundationType":"FoundationType","FirstFloorHt":"FirstFloorHt","Latitude":"Latitude","Longitude":"Longitude"}' \
+  --rasters FAST-main/rasters/HELENE_2024_adv15_e10_ResultMaskRaster.tif \
+  --flc CoastalA \
+  --pretty
 ```
 
 ## Command Reference
@@ -73,11 +85,15 @@ tests/
   test_duckdb_fast_pipeline.py  # DuckDB pipeline tests
   test_read_excel_config.py     # Excel config parsing tests
   test_shelter_demand_notebook.py # Notebook validation tests
-notebooks/
-  shelter_demand.ipynb          # BHI shelter demand E2E pipeline (Colab) — primary ARC deliverable
 data/
-  ARC Storm Surge Shelter Demand.xlsx  # Excel config interface (storm params, thresholds, BHI)
   Ground Truth Data.xlsx               # Historical ARC records used for reference/calibration
+  SVI_2022_US_CensusTracts.csv         # CDC Social Vulnerability Index (tract level)
+  SVI_2022_US_county.csv               # CDC Social Vulnerability Index (county level)
+  pipeline/                            # Pre-aggregated county-level LMH inputs
+    census_county_population.csv       # Census ACS county population
+    county_lmh_features.csv            # County-level LMH feature table
+    county_lmh_long.csv                # Long-form LMH per (event, advisory, county)
+    county_lmh_metadata.json           # Metadata for the LMH aggregation
 docs/
   e2e_pipeline.md               # End-to-end pipeline architecture (Mermaid)
   DIRECTION.md                  # ML→L/M/H pivot rationale and ARC methodology
@@ -96,7 +112,7 @@ FAST-main/
 
 | Source | Description | Format |
 |--------|-------------|--------|
-| NSI | USACE National Structure Inventory 2022 (30M+ buildings); notebook defaults to preprocessed HuggingFace Parquet with USACE API fallback | Parquet, partitioned by state |
+| NSI | USACE National Structure Inventory 2022 (30M+ buildings); the Colab pipeline defaults to preprocessed HuggingFace Parquet with USACE API fallback | Parquet, partitioned by state |
 | NHC P-Surge | NOAA storm surge inundation depth rasters | GeoTIFF (depth in feet) |
 | Census ACS | Population by census tract | API (data.census.gov) |
 | SVI | CDC Social Vulnerability Index | Census tract level |
@@ -112,7 +128,7 @@ Building damage is classified into intensity zones per ARC's Mass Care Planning 
 | **Medium** | 11-34% destroyed | 9-12 ft | 3% of affected pop |
 | **Low** | 0-10% destroyed | 4-8 ft | 1% of affected pop |
 
-The **Building Habitability Index (BHI)** combines damage state fractions with utility disruption factors to estimate the fraction of residents who will seek shelter. BHI is computed per census tract in `notebooks/shelter_demand.ipynb`.
+The **Building Habitability Index (BHI)** combines damage state fractions with utility disruption factors to estimate the fraction of residents who will seek shelter. BHI is computed per census tract in the shelter-demand Colab notebook (hosted in Google Drive).
 
 ## Prediction Results
 
