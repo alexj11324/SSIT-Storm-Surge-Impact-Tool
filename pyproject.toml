@@ -6,8 +6,6 @@ requires-python = ">=3.10"
 dependencies = [
     "pyarrow",
     "rasterio",
-    "pyyaml",
-    "h3",
     "duckdb",
     "geopandas",
     "requests",

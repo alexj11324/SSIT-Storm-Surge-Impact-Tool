@@ -4,10 +4,9 @@
 graph TD
     subgraph "External Data Sources"
         NHC["NHC P-Surge GeoTIFF"]
-        NSI_API["USACE NSI API"]
+        NSI_API["HuggingFace NSI Parquet<br/>or USACE NSI API"]
         CENSUS["Census ACS 5-year<br/>(tract-level population)"]
         SVI["CDC SVI 2022<br/>(tract-level, RPL_THEMES 0–1)"]
-        GT["Ground Truth Data.xlsx<br/>(9 hurricanes 2018–2024)"]
     end
 
     subgraph "Input"
@@ -16,7 +15,7 @@ graph TD
 
     subgraph "Stage 1: Data Acquisition"
         RASTER["Download P-Surge Raster<br/>NHC ZIP → TIF in memory<br/>+ identify affected states"]
-        NSI_DL["Download NSI per State<br/>USACE API → GeoJSON → Parquet<br/>retains bid + cbfips"]
+        NSI_DL["Load NSI per State<br/>HF Parquet or USACE API fallback<br/>retains bid + cbfips"]
     end
 
     subgraph "Stage 2: FAST Damage Engine"
@@ -56,14 +55,7 @@ graph TD
     CENSUS --> SVIJOIN
     SVI --> SVIJOIN
     SVIJOIN --> SHELTER
-    SHELTER -->|"shelter_demand_output.csv<br/>+ .xlsx"| VALIDATE
-
-    subgraph "Stage 5: Validation"
-        VALIDATE["Compare vs Ground Truth<br/>RMSE, MAE, R²<br/>threshold sensitivity"]
-    end
-
-    VALIDATE -->|"lmh_validation_report.md"| DONE["Deliverable<br/>→ paste back to Excel"]
-    GT --> VALIDATE
+    SHELTER -->|"shelter_demand_output.csv<br/>+ .xlsx"| DONE["Deliverables<br/>CSV + XLSX"]
 
     %% Styling
     style EXCEL fill:#1d3557,color:#fff
@@ -105,9 +97,8 @@ graph TD
 | 6 | 2 | FAST Engine |
 | 7 | 3 | Derive Tract GEOID |
 | 8 | 3 | Classify Damage State + Aggregate |
-| 9 | 3 | Classify Tract Severity |
-| 10 | 4 | Compute BHI Factor |
-| 11 | 4 | Census + SVI Join |
-| 12 | 4 | Shelter-Seeking Estimation |
-| 13 | 5 | Validate vs Ground Truth |
-| 14 | — | Export |
+| 9 | 4 | Load SVI Data |
+| 10 | 4 | Compute Shelter-Seeking Population |
+| 11 | 4 | Estimates Overview |
+| 12 | 4 | Map Region Impacts |
+| 13 | 5 | Export Results |

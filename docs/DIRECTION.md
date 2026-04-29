@@ -204,9 +204,8 @@ From FAST data:
 
 The L/M/H classification described in Sections 1-3 is now implemented as:
 
-- **Stages 1-3 (local)**: `scripts/duckdb_fast_pipeline.py` — DuckDB SQL transforms NSI Parquet → FAST CSV, runs FAST engine, produces per-building predictions.
-- **Stage 4 (Colab)**: `notebooks/shelter_demand.ipynb` — Reads predictions, classifies damage states, computes BHI factor, joins Census ACS population + CDC SVI, estimates shelter-seeking population per census tract.
-- **Stage 5 (local)**: `scripts/validate_pipeline.py` — Schema checks + aggregate stats vs ARC ground truth.
+- **Current Colab path**: `notebooks/shelter_demand.ipynb` orchestrates Excel parameters, NHC raster download, affected-state inference, NSI loading, FAST input preparation, FAST execution, damage classification, BHI computation, Census/SVI joins, and CSV/XLSX export.
+- **FAST input helper**: `scripts/duckdb_fast_pipeline.py` provides the DuckDB SQL transformation from NSI Parquet → FAST CSV and remains the canonical source for FAST column mapping.
 
 See `docs/e2e_pipeline.md` for the full architecture diagram with cell-to-stage mapping.
 
@@ -223,7 +222,7 @@ See `docs/e2e_pipeline.md` for the full architecture diagram with cell-to-stage 
 | Excel config interface | Working | **Reused** — now reads storm params + thresholds |
 | Tier 2 ML calibration (XGBoost) | R²=-0.308 | **Dropped** — deterministic approach chosen |
 | Tier 3 EVT uncertainty | Working | **Dropped** — ARC has own planning multipliers |
-| Ground Truth comparison | 56 rows | **Reframed** — validates L/M/H against historical events |
+| Ground Truth comparison | 56 rows | **Reframed** — historical reference for calibration/review, not a separate pipeline entrypoint |
 
 ---
 

@@ -13,32 +13,27 @@ def get_default_params():
         # ── Storm inputs ──────────────────────────────────────────
         "storm_id": "",
         "storm_name": "",
-        "advisory":00,
+        "advisory": 00,
         "year": 0000,
         # ── FAST engine ───────────────────────────────────────────
         "flood_load_condition": "CoastalA",  # CoastalA | CoastalV | Riverine
         "fast_timeout": 1800,  # FAST subprocess timeout (seconds)
         # ── Residential building types ────────────────────────────
-        "BUILDING_TYPES" : {
-            "RES1"  : "",
-            "RES2"  : "",
-            "RES3A" : "",
-            "RES3B" : "",
-            "RES3C" : "",
-            "RES3D" : "",
-            "RES3E" : "",
-            "RES3F" : "",
-            "RES4"  : "",
-            "RES5"  : "",
-            "RES6"  : ""
+        "BUILDING_TYPES": {
+            "RES1": "",
+            "RES2": "",
+            "RES3A": "",
+            "RES3B": "",
+            "RES3C": "",
+            "RES3D": "",
+            "RES3E": "",
+            "RES3F": "",
+            "RES4": "",
+            "RES5": "",
+            "RES6": "",
         },
         # ── Damage assessment categories ──────────────────────────
-        "DAMAGE_CATEGORIES" : {
-            ">9" : "",
-            ">6" : "",
-            ">3" : "",
-            ">1" : ""
-        },
+        "DAMAGE_CATEGORIES": {">9": "", ">6": "", ">3": "", ">1": ""},
         # ── Geography ─────────────────────────────────────────────
         "geography": "county",
         # ── Network / performance ────────────────────────────────
@@ -56,6 +51,13 @@ def nan_to_none(value):
     if pd.isna(value):
         return None
     return value
+
+
+def optional_cell(df: pd.DataFrame, row: int, col: int):
+    try:
+        return nan_to_none(df.iloc[row, col])
+    except IndexError:
+        return None
 
 
 def parse_range_pct(value):
@@ -91,74 +93,61 @@ def _warn_default(message: str) -> None:
 def _read_storm_inputs(df: pd.DataFrame) -> dict[str, object]:
     extracted: dict[str, object] = {}
 
-    value = nan_to_none(df.iloc[5, 2])
+    value = optional_cell(df, 5, 2)
     if value is not None:
         extracted["storm_id"] = str(value).upper()
 
-    value = nan_to_none(df.iloc[6, 2])
+    value = optional_cell(df, 6, 2)
     if value is not None:
         extracted["storm_name"] = str(value).upper()
 
-    value = nan_to_none(df.iloc[7, 2])
+    value = optional_cell(df, 7, 2)
     if value is not None:
         extracted["advisory"] = int(value)
 
-    value = nan_to_none(df.iloc[8, 2])
+    value = optional_cell(df, 8, 2)
     if value is not None:
         extracted["year"] = int(value)
 
     return extracted
 
 
-
-
-
 def _read_optional_building_type(df: pd.DataFrame) -> dict[str, dict[str, str]]:
-    try:
-        building_types: dict[str, str] = {}
+    building_types: dict[str, str] = {}
 
-        res_types = ["1", "2", "3A", "3B", "3C", "3D", "3E", "3F", "4", "5", "6"]
-        idx = list(range(12, 23))
-        for res, ix in zip(res_types, idx):
-            ind = df.iloc[ix, 2]
-            if ind is not None:
-                building_types["RES" + str(res)] = str(ind).upper()
-    
-    except IndexError:
+    res_types = ["1", "2", "3A", "3B", "3C", "3D", "3E", "3F", "4", "5", "6"]
+    idx = list(range(12, 23))
+    for res, ix in zip(res_types, idx):
+        ind = optional_cell(df, ix, 2)
+        if ind is not None:
+            building_types["RES" + str(res)] = str(ind).upper()
+
+    if not building_types:
         return {}
 
-    return {
-        "BUILDING_TYPES": {
-            res: ind for res, ind in building_types.items()
-        }
-    }
+    return {"BUILDING_TYPES": {res: ind for res, ind in building_types.items()}}
 
 
 def _read_optional_damage_categories(df: pd.DataFrame) -> dict[str, dict[str, str]]:
-    try:
-        damage_categories: dict[str, str] = {}
+    damage_categories: dict[str, str] = {}
 
-        ht_vals = [">9", ">6", ">3", ">1"]
-        idx = list(range(26, 30))
-        for ht, ix in zip(ht_vals, idx):
-            cat = df.iloc[ix, 2]
-            if cat is not None:
-                damage_categories[str(ht)] = str(cat).upper()
-    
-    except IndexError:
+    ht_vals = [">9", ">6", ">3", ">1"]
+    idx = list(range(26, 30))
+    for ht, ix in zip(ht_vals, idx):
+        cat = optional_cell(df, ix, 2)
+        if cat is not None:
+            damage_categories[str(ht)] = str(cat).upper()
+
+    if not damage_categories:
         return {}
 
-    return {
-        "DAMAGE_CATEGORIES": {
-            val: cat for val, cat in damage_categories.items()
-        }
-    }
+    return {"DAMAGE_CATEGORIES": {val: cat for val, cat in damage_categories.items()}}
 
 
 def _read_geography(df: pd.DataFrame) -> dict[str, object]:
     extracted: dict[str, object] = {}
 
-    value = nan_to_none(df.iloc[32, 2])
+    value = optional_cell(df, 32, 2)
     if value is not None:
         extracted["geography"] = str(value).upper()
 
@@ -179,9 +168,7 @@ def load_config_from_excel(xlsx_path):
     try:
         df = pd.read_excel(xlsx_path, sheet_name="Interface", header=None)
     except Exception as exc:
-        _warn_default(
-            f"Failed to read {xlsx_path} ({exc}). Continuing with default parameters."
-        )
+        _warn_default(f"Failed to read {xlsx_path} ({exc}). Continuing with default parameters.")
         return params
 
     extracted: dict[str, object] = {}

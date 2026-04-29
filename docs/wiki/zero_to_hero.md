@@ -24,17 +24,14 @@ We achieve this via:
 ## Part III: Setup, Execute, and Contribute
 
 1. **Prerequisites**
-   Install PyArrow, DuckDB, Rasterio, PyYAML:
+   Install the project dependencies:
    ```bash
-   pip install pyarrow rasterio pyyaml h3 duckdb geopandas
+   pip install -e '.[dev]'
    ```
-2. **Download a P-Surge raster**
-   Download NHC P-Surge rasters for a storm event:
-   ```bash
-   # Edit storm parameters at the bottom of the script, then run:
-   python scripts/import_nhc_by_storm.py
-   ```
-3. **Run the primary pipeline**
+2. **Run the shelter demand notebook**
+   Open `notebooks/shelter_demand.ipynb` in Google Colab. The notebook reads the Excel interface, applies any notebook-only storm overrides, downloads the NHC P-Surge raster, infers affected states from the raster footprint, loads NSI, runs FAST, and exports CSV/XLSX deliverables.
+3. **Optional local FAST-input build**
+   Use this only when you want to build a FAST-ready CSV outside the notebook:
    ```bash
    python scripts/duckdb_fast_pipeline.py \
      --parquet-glob "data/nsi/state=FL/*.parquet" \
