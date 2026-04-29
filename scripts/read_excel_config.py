@@ -34,6 +34,20 @@ def get_default_params():
         },
         # ── Damage assessment categories ──────────────────────────
         "DAMAGE_CATEGORIES": {">9": "", ">6": "", ">3": "", ">1": ""},
+        # FAST BldgDmgPct damage-state thresholds (percent, 0-100).
+        "DAMAGE_STATE_THRESHOLDS": {
+            "Slight": (0, 15),
+            "Moderate": (15, 40),
+            "Extensive": (40, 60),
+            "Complete": (60, 100),
+        },
+        # ARC L/M/H severity thresholds, expressed as fractions of buildings.
+        "DAMAGE_SEVERITY": {
+            "high": {"pct_destroyed": 0.35, "pct_major_damage": 0.35},
+            "medium": {"pct_destroyed": 0.11, "pct_major_damage": 0.16},
+        },
+        # Population impacted rates by L/M/H severity. Values are percentages.
+        "PERCENT_IMPACT": {"high": 60, "medium": 30, "low": 10},
         # ── Geography ─────────────────────────────────────────────
         "geography": "county",
         # ── Network / performance ────────────────────────────────
@@ -58,6 +72,32 @@ def optional_cell(df: pd.DataFrame, row: int, col: int):
         return nan_to_none(df.iloc[row, col])
     except IndexError:
         return None
+
+
+def clean_text(value, *, default: str = "") -> str:
+    if value is None or pd.isna(value):
+        return default
+    return str(value).strip()
+
+
+def normalize_flood_load_condition(value) -> str:
+    raw = clean_text(value, default="CoastalA")
+    key = re.sub(r"[\s_-]+", "", raw).lower()
+    return {
+        "coastala": "CoastalA",
+        "coastalv": "CoastalV",
+        "riverine": "Riverine",
+    }.get(key, raw)
+
+
+def normalize_params(params: dict[str, object]) -> dict[str, object]:
+    params["storm_id"] = clean_text(params.get("storm_id")).upper()
+    params["storm_name"] = clean_text(params.get("storm_name")).upper()
+    params["geography"] = clean_text(params.get("geography"), default="county").lower()
+    params["flood_load_condition"] = normalize_flood_load_condition(
+        params.get("flood_load_condition")
+    )
+    return params
 
 
 def parse_range_pct(value):
@@ -95,11 +135,11 @@ def _read_storm_inputs(df: pd.DataFrame) -> dict[str, object]:
 
     value = optional_cell(df, 5, 2)
     if value is not None:
-        extracted["storm_id"] = str(value).upper()
+        extracted["storm_id"] = clean_text(value).upper()
 
     value = optional_cell(df, 6, 2)
     if value is not None:
-        extracted["storm_name"] = str(value).upper()
+        extracted["storm_name"] = clean_text(value).upper()
 
     value = optional_cell(df, 7, 2)
     if value is not None:
@@ -120,7 +160,7 @@ def _read_optional_building_type(df: pd.DataFrame) -> dict[str, dict[str, str]]:
     for res, ix in zip(res_types, idx):
         ind = optional_cell(df, ix, 2)
         if ind is not None:
-            building_types["RES" + str(res)] = str(ind).upper()
+            building_types["RES" + str(res)] = clean_text(ind).upper()
 
     if not building_types:
         return {}
@@ -136,7 +176,7 @@ def _read_optional_damage_categories(df: pd.DataFrame) -> dict[str, dict[str, st
     for ht, ix in zip(ht_vals, idx):
         cat = optional_cell(df, ix, 2)
         if cat is not None:
-            damage_categories[str(ht)] = str(cat).upper()
+            damage_categories[str(ht)] = clean_text(cat).upper()
 
     if not damage_categories:
         return {}
@@ -149,7 +189,7 @@ def _read_geography(df: pd.DataFrame) -> dict[str, object]:
 
     value = optional_cell(df, 32, 2)
     if value is not None:
-        extracted["geography"] = str(value).upper()
+        extracted["geography"] = clean_text(value).lower()
 
     return extracted
 
@@ -163,13 +203,13 @@ def load_config_from_excel(xlsx_path):
     xlsx_path = Path(xlsx_path)
     if not xlsx_path.exists():
         _warn_default(f"Config file {xlsx_path} not found. Continuing with default parameters.")
-        return params
+        return normalize_params(params)
 
     try:
         df = pd.read_excel(xlsx_path, sheet_name="Interface", header=None)
     except Exception as exc:
         _warn_default(f"Failed to read {xlsx_path} ({exc}). Continuing with default parameters.")
-        return params
+        return normalize_params(params)
 
     extracted: dict[str, object] = {}
     extracted.update(_read_storm_inputs(df))
@@ -177,7 +217,7 @@ def load_config_from_excel(xlsx_path):
     extracted.update(_read_optional_damage_categories(df))
     extracted.update(_read_geography(df))
 
-    return deep_update(params, extracted)
+    return normalize_params(deep_update(params, extracted))
 
 
 if __name__ == "__main__":

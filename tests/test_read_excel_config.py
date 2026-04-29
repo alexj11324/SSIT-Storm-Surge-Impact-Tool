@@ -13,15 +13,15 @@ def test_load_config_reads_current_interface_fields(
 ) -> None:
     """Read storm inputs, building filters, damage categories, and geography."""
     df = pd.DataFrame([[pd.NA] * 5 for _ in range(33)])
-    df.iloc[5, 2] = "al142018"
-    df.iloc[6, 2] = "michael"
+    df.iloc[5, 2] = " al142018 "
+    df.iloc[6, 2] = " michael "
     df.iloc[7, 2] = 20
     df.iloc[8, 2] = 2018
     df.iloc[12, 2] = "y"
     df.iloc[13, 2] = "n"
     df.iloc[26, 2] = "Destroyed"
     df.iloc[27, 2] = "Major"
-    df.iloc[32, 2] = "census tract"
+    df.iloc[32, 2] = " Census Tract "
 
     config_path = tmp_path / "interface.xlsx"
     config_path.touch()
@@ -38,7 +38,7 @@ def test_load_config_reads_current_interface_fields(
     assert params["BUILDING_TYPES"]["RES2"] == "N"
     assert params["DAMAGE_CATEGORIES"][">9"] == "DESTROYED"
     assert params["DAMAGE_CATEGORIES"][">6"] == "MAJOR"
-    assert params["geography"] == "CENSUS TRACT"
+    assert params["geography"] == "census tract"
 
 
 def test_load_config_keeps_new_runtime_defaults_when_excel_omits_them(
@@ -57,6 +57,9 @@ def test_load_config_keeps_new_runtime_defaults_when_excel_omits_them(
     assert params["flood_load_condition"] == "CoastalA"
     assert params["BUILDING_TYPES"]["RES1"] == ""
     assert params["DAMAGE_CATEGORIES"][">9"] == ""
+    assert params["DAMAGE_STATE_THRESHOLDS"]["Complete"] == (60, 100)
+    assert params["DAMAGE_SEVERITY"]["high"]["pct_destroyed"] == 0.35
+    assert params["PERCENT_IMPACT"]["medium"] == 30
     assert params["output_csv_name"] == "shelter_demand_output.csv"
 
 

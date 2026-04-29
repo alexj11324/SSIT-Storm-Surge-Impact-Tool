@@ -126,7 +126,7 @@ def test_importer_handles_no_overlapping_states(mock_states, mock_sjoin):
 def test_normalizes_storm_id_with_two_digit_year():
     assert nhc._normalize_storm_id("AL0224", 2024) == "AL022024"
     assert nhc._normalize_storm_id("al02", 2024) == "AL022024"
-    assert nhc._normalize_storm_id("AL022024", 2024) == "AL022024"
+    assert nhc._normalize_storm_id(" AL022024 ", 2024) == "AL022024"
 
 
 @patch("scripts.import_nhc_by_storm.gpd.sjoin")

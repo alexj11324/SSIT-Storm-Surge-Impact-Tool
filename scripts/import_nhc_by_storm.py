@@ -50,7 +50,7 @@ NHC_FORECASTS_BASE_URL = "https://www.nhc.noaa.gov/gis/inundation/forecasts/"
 
 def _normalize_storm_id(storm_id: str, year: int) -> str:
     """Ensure storm_id follows basin + two-digit number + four-digit year, using provided year if missing."""
-    storm_id = storm_id.upper()
+    storm_id = str(storm_id).strip().upper()
     match = re.match(r"(?P<basin>[A-Z]{2})(?P<number>\d{1,2})(?P<year>\d{2,4})?$", storm_id)
     if not match:
         return f"{storm_id}{year}"
@@ -92,7 +92,7 @@ def _advisory_variants(adv: int) -> List[str]:
 
 
 def _build_tif_filename(storm_name: str, year: int, adv: int) -> str:
-    return f"{storm_name.upper()}_{year}_adv{int(adv)}_e10_ResultMaskRaster.tif"
+    return f"{str(storm_name).strip().upper()}_{year}_adv{int(adv)}_e10_ResultMaskRaster.tif"
 
 
 def _get_states(cb: bool, cache: bool, year: int):
@@ -169,7 +169,7 @@ def import_surge_data(
         dictionary: (1) The storm surge heights data from the raster file and (2) a list of states captured in the raster data
     """
     normalized_storm_id = _normalize_storm_id(storm_id, year)
-    storm_name = storm_name.upper()
+    storm_name = str(storm_name).strip().upper()
     tif_filename_in_zip = _build_tif_filename(storm_name, year, adv)
     download_session = session or _build_session(retries=retries)
     candidate_urls: List[str] = []
