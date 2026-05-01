@@ -74,6 +74,19 @@ def optional_cell(df: pd.DataFrame, row: int, col: int):
         return None
 
 
+def optional_cell_by_label(df: pd.DataFrame, label: str, col: int):
+    target = re.sub(r"\s+", " ", label).strip().casefold()
+    for _, row in df.iterrows():
+        row_label = clean_text(row.iloc[0] if len(row) else "")
+        normalized = re.sub(r"\s+", " ", row_label).strip().casefold()
+        if normalized == target:
+            try:
+                return nan_to_none(row.iloc[col])
+            except IndexError:
+                return None
+    return None
+
+
 def clean_text(value, *, default: str = "") -> str:
     if value is None or pd.isna(value):
         return default
@@ -187,9 +200,21 @@ def _read_optional_damage_categories(df: pd.DataFrame) -> dict[str, dict[str, st
 def _read_geography(df: pd.DataFrame) -> dict[str, object]:
     extracted: dict[str, object] = {}
 
-    value = optional_cell(df, 32, 2)
+    value = optional_cell_by_label(df, "Geography", 2)
+    if value is None:
+        value = optional_cell(df, 32, 2)
     if value is not None:
         extracted["geography"] = clean_text(value).lower()
+
+    return extracted
+
+
+def _read_flood_load_condition(df: pd.DataFrame) -> dict[str, object]:
+    extracted: dict[str, object] = {}
+
+    value = optional_cell_by_label(df, "Flood Load Condition", 2)
+    if value is not None:
+        extracted["flood_load_condition"] = clean_text(value)
 
     return extracted
 
@@ -216,6 +241,7 @@ def load_config_from_excel(xlsx_path):
     extracted.update(_read_optional_building_type(df))
     extracted.update(_read_optional_damage_categories(df))
     extracted.update(_read_geography(df))
+    extracted.update(_read_flood_load_condition(df))
 
     return normalize_params(deep_update(params, extracted))
 

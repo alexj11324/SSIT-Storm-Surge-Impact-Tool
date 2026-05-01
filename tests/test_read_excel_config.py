@@ -63,6 +63,24 @@ def test_load_config_keeps_new_runtime_defaults_when_excel_omits_them(
     assert params["output_csv_name"] == "shelter_demand_output.csv"
 
 
+def test_load_config_reads_flood_load_condition_from_interface_label(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The FAST flood setting should come from the spreadsheet when present."""
+    df = pd.DataFrame([[pd.NA] * 5 for _ in range(36)])
+    df.iloc[33, 0] = "Flood Load Condition"
+    df.iloc[33, 2] = " coastalv "
+
+    config_path = tmp_path / "interface.xlsx"
+    config_path.touch()
+
+    monkeypatch.setattr(read_excel_config.pd, "read_excel", lambda *args, **kwargs: df)
+
+    params = read_excel_config.load_config_from_excel(config_path)
+
+    assert params["flood_load_condition"] == "CoastalV"
+
+
 def test_load_config_merges_partial_building_type_override(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

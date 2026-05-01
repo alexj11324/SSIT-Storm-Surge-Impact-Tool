@@ -32,6 +32,8 @@ venv/
 # Local assistant configs (entire tree ignored; force-add paths you must share, e.g. .cursor/skills/**/SKILL.md)
 .claude/
 .cursor/
+AGENTS.md
+CLAUDE.md
 
 # Notebook backups
 *.backup.ipynb
